@@ -1,0 +1,30 @@
+# 🔐 Secrets (password, tokens)
+.env
+.env.*
+
+# 🐍 Python auto files
+__pycache__/
+*.pyc
+*.pyo
+
+# 🧪 Virtual environment
+.venv/
+venv/
+env/
+
+# 🗄️ Database (local data)
+*.db
+*.sqlite3
+
+# 🧬 Generated data (Chroma, embeddings)
+chroma/
+data/
+storage/
+
+# 🧑‍💻 Editor settings
+.vscode/
+.idea/
+
+# 💻 OS files
+.DS_Store
+Thumbs.db
