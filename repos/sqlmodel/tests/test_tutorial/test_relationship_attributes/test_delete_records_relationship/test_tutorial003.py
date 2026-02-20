@@ -1,0 +1,97 @@
+import importlib
+from types import ModuleType
+
+import pytest
+from sqlmodel import create_engine
+
+from ....conftest import PrintMock, needs_py310
+
+
+@pytest.fixture(
+    name="mod",
+    params=[
+        pytest.param("tutorial003_py39"),
+        pytest.param("tutorial003_py310", marks=needs_py310),
+    ],
+)
+def get_module(request: pytest.FixtureRequest) -> ModuleType:
+    mod = importlib.import_module(
+        f"docs_src.tutorial.relationship_attributes.cascade_delete_relationships.{request.param}"
+    )
+    mod.sqlite_url = "sqlite://"
+    mod.engine = create_engine(mod.sqlite_url)
+    return mod
+
+
+def test_tutorial(print_mock: PrintMock, mod: ModuleType):
+    mod.main()
+    assert print_mock.calls == [
+        [
+            "Created hero:",
+            {
+                "age": None,
+                "id": 1,
+                "name": "Deadpond",
+                "secret_name": "Dive Wilson",
+                "team_id": 1,
+            },
+        ],
+        [
+            "Created hero:",
+            {
+                "age": 48,
+                "id": 2,
+                "name": "Rusty-Man",
+                "secret_name": "Tommy Sharp",
+                "team_id": 2,
+            },
+        ],
+        [
+            "Created hero:",
+            {
+                "age": None,
+                "id": 3,
+                "name": "Spider-Boy",
+                "secret_name": "Pedro Parqueador",
+                "team_id": None,
+            },
+        ],
+        [
+            "Updated hero:",
+            {
+                "age": None,
+                "id": 3,
+                "name": "Spider-Boy",
+                "secret_name": "Pedro Parqueador",
+                "team_id": 2,
+            },
+        ],
+        [
+            "Team Wakaland:",
+            {"id": 3, "headquarters": "Wakaland Capital City", "name": "Wakaland"},
+        ],
+        [
+            "Deleted team:",
+            {"id": 3, "headquarters": "Wakaland Capital City", "name": "Wakaland"},
+        ],
+        [
+            "Black Lion has no team:",
+            {
+                "age": 35,
+                "id": 4,
+                "name": "Black Lion",
+                "secret_name": "Trevor Challa",
+                "team_id": None,
+            },
+        ],
+        [
+            "Princess Sure-E has no team:",
+            {
+                "age": None,
+                "id": 5,
+                "name": "Princess Sure-E",
+                "secret_name": "Sure-E",
+                "team_id": None,
+            },
+        ],
+    ]
