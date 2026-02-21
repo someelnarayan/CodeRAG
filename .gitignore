@@ -16,10 +16,10 @@ env/
 *.db
 *.sqlite3
 
-# 🧬 Generated data (Chroma, embeddings)
+# 🧬 Generated data (Chroma, embeddings, cloned repos)
 chroma/
 data/
-storage/
+repos/
 
 # 🧑‍💻 Editor settings
 .vscode/

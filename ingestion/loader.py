@@ -3,7 +3,8 @@ import os
 IGNORE_DIRS = {
     ".git", ".github", "tests", "test",
     "docs", "doc", "__pycache__",
-    "node_modules", "venv", ".venv"
+    "node_modules", "venv", ".venv",
+    "_static", "deploying", "patterns", "tutorial", "examples"
 }
 
 ALLOWED_EXTENSIONS = {
@@ -12,9 +13,10 @@ ALLOWED_EXTENSIONS = {
 
 def load_repository(repo_path):
     files = []
+    skipped_count = 0
 
     for root, dirs, filenames in os.walk(repo_path):
-        # 🔥 skip junk directories
+        # 🔥 skip junk directories only
         dirs[:] = [d for d in dirs if d not in IGNORE_DIRS]
 
         for filename in filenames:
@@ -28,11 +30,15 @@ def load_repository(repo_path):
 
             try:
                 with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                    content = f.read()
                     files.append({
                         "path": file_path,
-                        "content": f.read()
+                        "content": content
                     })
-            except Exception:
+                    print(f"✓ Loaded: {file_path} ({len(content)} chars)")
+            except Exception as e:
+                print(f"⚠ Skipped: {file_path} - {str(e)}")
                 continue
 
+    print(f"\n✅ Loaded {len(files)} files")
     return files

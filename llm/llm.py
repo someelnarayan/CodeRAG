@@ -4,7 +4,7 @@
 import os
 import requests
 from groq import Groq
-from setting.settings import OLLAMA_BASE_URL, LLM_MODEL
+from setting.settings import OLLAMA_BASE_URL, LLM_MODEL, USE_GROQ
 
 
 # =====================
@@ -54,21 +54,24 @@ Question: {question}
 Answer clearly:
 """
 
-    response = groq_client.chat.completions.create(
-        model="llama-3.1-8b-instant",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.2,
-        max_tokens=512
-    )
+    try:
+        response = groq_client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.2,
+            max_tokens=512
+        )
 
-    return response.choices[0].message.content
+        return response.choices[0].message.content
+    except Exception as e:
+        # Surface the error so caller can mark task failed and log
+        print("GROQ ERROR:", repr(e))
+        raise
 
 
 # =====================
 # 🔁 HYBRID SWITCH (FINAL)
 # =====================
-USE_GROQ = True   # 🔥 DEMO / FAST MODE
-# USE_GROQ = False  # 🔁 LOCAL / OFFLINE MODE
 
 def generate_answer(question, context_chunks):
     if USE_GROQ:

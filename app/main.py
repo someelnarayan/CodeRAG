@@ -4,15 +4,19 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 import uuid
 import time
+from datetime import datetime
 
 from core import ingest_from_git, ask_question
 from auth.auth import authenticate_user, create_access_token, get_current_user
 from auth.models import Token
 
 from db.database import engine, Base, SessionLocal
-from db.models import Repository, QATask
-from utils.db_session import get_db
+from sqlalchemy import text
 
+# 🔥 REQUIRED FIX #1: correct import path
+from db.model import Repository, QATask
+
+from utils.db_session import get_db
 from utils.git_utils import get_latest_commit_hash
 from utils.files_utils import get_local_repo_path
 
@@ -22,6 +26,19 @@ app = FastAPI()
 # DB INIT
 # =========================
 Base.metadata.create_all(bind=engine)
+
+
+@app.on_event("startup")
+def ensure_db_schema():
+    """Ensure optional columns exist (safe to run multiple times).
+    Adds `source` column to `qa_tasks` if missing to avoid runtime errors.
+    """
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE qa_tasks ADD COLUMN IF NOT EXISTS source VARCHAR;"))
+        print("DB: ensured qa_tasks.source column exists")
+    except Exception as e:
+        print("DB migration error:", repr(e))
 
 # =========================
 # REQUEST MODELS
@@ -40,6 +57,8 @@ class AskRequest(BaseModel):
 # =========================
 
 def ingest_with_status(repo_url: str):
+    print("BACKGROUND INGEST TASK STARTED:", repo_url)  # 🔥 REQUIRED FIX #2
+
     db = SessionLocal()
     repo = None
 
@@ -51,33 +70,37 @@ def ingest_with_status(repo_url: str):
         if not repo:
             return
 
-        # Phase 1
         repo.status = "processing"
         repo.progress = 10
         db.commit()
         time.sleep(1)
 
-        # Phase 2
         repo.progress = 30
         db.commit()
         time.sleep(1)
 
-        # Phase 3
         repo.progress = 50
         db.commit()
 
         ingest_from_git(repo_url)
 
-        # Phase 4
         repo.progress = 70
         db.commit()
         time.sleep(1)
 
-        # ✅ Phase 5 (ADD THIS BLOCK)
         repo_path = get_local_repo_path(repo_url)
-
         if not repo_path.exists():
             raise Exception("Repo path does not exist")
+        
+        old_hash = repo.last_commit_hash
+        new_hash = get_latest_commit_hash(repo_path)
+
+        if old_hash is None:
+            repo.commit_status = "first_time"
+        elif old_hash == new_hash:
+            repo.commit_status = "same_as_before"
+        else:
+            repo.commit_status = "updated"
 
         old_hash = repo.last_commit_hash
         new_hash = get_latest_commit_hash(repo_path)
@@ -94,6 +117,8 @@ def ingest_with_status(repo_url: str):
         repo.status = "completed"
         db.commit()
 
+        print("BACKGROUND INGEST TASK COMPLETED:", repo_url)  # 🔥 REQUIRED FIX #3
+
     except Exception as e:
         print("INGEST ERROR:", e)
         if repo:
@@ -102,33 +127,51 @@ def ingest_with_status(repo_url: str):
 
     finally:
         db.close()
+
 # =========================
 # BACKGROUND Q&A
 # =========================
 
 def process_question(task_id: str, repo_url: str, question: str):
     db = SessionLocal()
-    task = None
 
     try:
-        answer = ask_question(repo_url, question)
-
+        # Load the task record first so we can update status on failure
         task = db.query(QATask).filter(
             QATask.task_id == task_id
         ).first()
 
         if not task:
+            print(f"Q&A TASK NOT FOUND: {task_id}")
             return
 
+        # Ensure task marked processing (in case worker restarted)
+        task.status = "processing"
+        db.commit()
+
+        # Run the actual QA pipeline
+        result = ask_question(repo_url, question)
+
         task.status = "completed"
-        task.answer = answer
+        if isinstance(result, dict):
+            task.answer = result.get("answer")
+            task.source = result.get("source")
+        else:
+            task.answer = result
+            task.source = None
+        task.completed_at = datetime.utcnow()
         db.commit()
 
     except Exception as e:
-        print("Q&A ERROR:", e)
-        if task:
-            task.status = "failed"
-            db.commit()
+        print("Q&A ERROR:", repr(e))
+        try:
+            if 'task' in locals() and task:
+                task.status = "failed"
+                task.answer = f"Error: {str(e)}"
+                task.completed_at = datetime.utcnow()
+                db.commit()
+        except Exception as db_e:
+            print("Failed to update task status:", repr(db_e))
 
     finally:
         db.close()
@@ -168,7 +211,6 @@ def ingest(
         Repository.repo_url == req.repo_url
     ).first()
 
-    # First time repo
     if not repo:
         repo = Repository(
             repo_url=req.repo_url,
@@ -180,12 +222,10 @@ def ingest(
         db.commit()
         db.refresh(repo)
 
-    # Commit check
     repo_path = get_local_repo_path(req.repo_url)
 
     if repo_path.exists() and repo.last_commit_hash:
         latest_hash = get_latest_commit_hash(repo_path)
-
         if repo.last_commit_hash == latest_hash and repo.status == "completed":
             return {
                 "status": "skipped",
@@ -205,7 +245,6 @@ def ingest(
         "status": "started",
         "message": "Ingestion started"
     }
-    
 
 # =========================
 # ASK API
@@ -262,6 +301,8 @@ def get_result(
 
     return {
         "status": task.status,
-        "answer": task.answer
+        "answer": task.answer,
+        "source": getattr(task, "source", None)
     }
 #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
+
