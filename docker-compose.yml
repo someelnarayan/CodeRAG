@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  # Ollama runs the Llama 3.1 model locally
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama-llama31
+    ports:
+      - "11434:11434"
+    volumes:
+      # Store downloaded models so we don't re-download them
+      - ollama_data:/root/.ollama
+    environment:
+      # Try to use GPU (NVIDIA or AMD)
+      - OLLAMA_GPU=1
+    deploy:
+      resources:
+        reservations:
+          devices:
+            # Enable GPU access
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    # Check that Ollama is actually running
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # Uncomment below if you want to run PostgreSQL in Docker too
+  # postgres:
+  #   image: postgres:15-alpine
+  #   container_name: postgres-code-ragg
+  #   environment:
+  #     POSTGRES_USER: postgres
+  #     POSTGRES_PASSWORD: your_db_password
+  #     POSTGRES_DB: code_ragg_db
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+
+  # Uncomment below if you want to run Redis in Docker too
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: redis-cache
+  #   ports:
+  #     - "6379:6379"
+
+volumes:
+  ollama_data:
+    driver: local
+  # postgres_data:
+  #   driver: local

@@ -1,10 +1,18 @@
-from fastapi import FastAPI, BackgroundTasks, Depends, HTTPException
+from fastapi import FastAPI, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordRequestForm
-from pydantic import BaseModel
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, validator
 from sqlalchemy.orm import Session
 import uuid
 import time
 from datetime import datetime
+from dotenv import load_dotenv
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
+# Load environment variables from .env file at startup
+load_dotenv()
 
 from core import ingest_from_git, ask_question
 from auth.auth import authenticate_user, create_access_token, get_current_user
@@ -12,6 +20,9 @@ from auth.models import Token
 
 from db.database import engine, Base, SessionLocal
 from sqlalchemy import text
+
+# Redis client (used by health check and cache operations)
+from setting.redis_client import redis_client
 
 # 🔥 REQUIRED FIX #1: correct import path
 from db.model import Repository, QATask
@@ -21,6 +32,17 @@ from utils.git_utils import get_latest_commit_hash
 from utils.files_utils import get_local_repo_path
 
 app = FastAPI()
+
+# ✅ Setup Rate Limiter
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request, exc):
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "Rate limit exceeded. Max 10 requests per minute."}
+    )
 
 # =========================
 # DB INIT
@@ -40,24 +62,96 @@ def ensure_db_schema():
     except Exception as e:
         print("DB migration error:", repr(e))
 
-# =========================
-# REQUEST MODELS
-# =========================
+# Health check for monitoring
+@app.get("/health")
+def health_check(db: Session = Depends(get_db)):
+    """Simple health check - used by load balancers and monitoring."""
+    try:
+        # Can we reach the database?
+        db.execute(text("SELECT 1"))
+        db_status = "ok"
+        
+        # Can we reach Redis?
+        try:
+            redis_client.ping()
+            redis_status = "ok"
+        except:
+            redis_status = "down"
+        
+        # Is Ollama running? (only check if we're using it)
+        from setting.settings import USE_GROQ, OLLAMA_HEALTH_URL
+        if USE_GROQ:
+            ollama_status = "not_used"
+        else:
+            try:
+                import requests
+                requests.get(OLLAMA_HEALTH_URL, timeout=2)
+                ollama_status = "ok"
+            except:
+                ollama_status = "down"
+        
+        return {
+            "status": "healthy",
+            "services": {
+                "database": db_status,
+                "redis": redis_status,
+                "ollama": ollama_status
+            }
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "error": str(e)
+        }
 
 class IngestRequest(BaseModel):
     repo_url: str
+    
+    @validator('repo_url')
+    def validate_repo_url(cls, v):
+        v = v.strip() if v else ""
+        if not v:
+            raise ValueError("please provide a repo URL")
+        if len(v) > 500:
+            raise ValueError("repo URL is too long")
+        if not (v.startswith("http://") or v.startswith("https://") or v.startswith("git@")):
+            raise ValueError("use a valid git URL (http://, https://, or git@)")
+        return v
 
 
 class AskRequest(BaseModel):
     repo_url: str
     question: str
+    
+    @validator('repo_url')
+    def validate_repo_url(cls, v):
+        v = v.strip() if v else ""
+        if not v:
+            raise ValueError("please provide a repo URL")
+        if len(v) > 500:
+            raise ValueError("repo URL is too long")
+        if not (v.startswith("http://") or v.startswith("https://") or v.startswith("git@")):
+            raise ValueError("use a valid git URL (http://, https://, or git@)")
+        return v
+    
+    @validator('question')
+    def validate_question(cls, v):
+        v = v.strip() if v else ""
+        if not v:
+            raise ValueError("please ask a question")
+        if len(v) < 3:
+            raise ValueError("your question is too short (at least 3 characters)")
+        if len(v) > 2000:
+            raise ValueError("your question is too long (max 2000 characters)")
+        return v
 
 # =========================
 # BACKGROUND INGESTION
 # =========================
 
+# Run ingestion in the background
 def ingest_with_status(repo_url: str):
-    print("BACKGROUND INGEST TASK STARTED:", repo_url)  # 🔥 REQUIRED FIX #2
+    print(f"Starting ingestion for: {repo_url}")
 
     db = SessionLocal()
     repo = None
@@ -91,16 +185,6 @@ def ingest_with_status(repo_url: str):
         repo_path = get_local_repo_path(repo_url)
         if not repo_path.exists():
             raise Exception("Repo path does not exist")
-        
-        old_hash = repo.last_commit_hash
-        new_hash = get_latest_commit_hash(repo_path)
-
-        if old_hash is None:
-            repo.commit_status = "first_time"
-        elif old_hash == new_hash:
-            repo.commit_status = "same_as_before"
-        else:
-            repo.commit_status = "updated"
 
         old_hash = repo.last_commit_hash
         new_hash = get_latest_commit_hash(repo_path)
@@ -108,7 +192,7 @@ def ingest_with_status(repo_url: str):
         if old_hash is None:
             repo.commit_status = "first_time"
         elif old_hash == new_hash:
-            repo.commit_status = "same_as_before"
+            repo.commit_status = "same_repo"
         else:
             repo.commit_status = "updated"
 
@@ -117,12 +201,13 @@ def ingest_with_status(repo_url: str):
         repo.status = "completed"
         db.commit()
 
-        print("BACKGROUND INGEST TASK COMPLETED:", repo_url)  # 🔥 REQUIRED FIX #3
+        print(f"Done! Indexed {repo_url}")
 
     except Exception as e:
         print("INGEST ERROR:", e)
         if repo:
             repo.status = "failed"
+            repo.commit_status = "failed"   # ✅ REQUIRED FIX
             db.commit()
 
     finally:
@@ -201,9 +286,11 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()):
 # =========================
 
 @app.post("/ingest")
+@limiter.limit("3/minute")
 def ingest(
     req: IngestRequest,
     background_tasks: BackgroundTasks,
+    request: Request,
     user: str = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -224,13 +311,20 @@ def ingest(
 
     repo_path = get_local_repo_path(req.repo_url)
 
+    # 🔥 REQUIRED FIX STARTS HERE
     if repo_path.exists() and repo.last_commit_hash:
         latest_hash = get_latest_commit_hash(repo_path)
+
         if repo.last_commit_hash == latest_hash and repo.status == "completed":
+            # ✅ UPDATE COMMIT STATUS EVEN ON SKIP
+            repo.commit_status = "same_repo"
+            db.commit()
+
             return {
                 "status": "skipped",
                 "message": "Repo already indexed, no code changes detected"
             }
+    # 🔥 REQUIRED FIX ENDS HERE
 
     repo.status = "processing"
     repo.progress = 0
@@ -251,9 +345,11 @@ def ingest(
 # =========================
 
 @app.post("/ask")
+@limiter.limit("10/minute")
 def ask(
     req: AskRequest,
     background_tasks: BackgroundTasks,
+    request: Request,
     user: str = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -304,5 +400,3 @@ def get_result(
         "answer": task.answer,
         "source": getattr(task, "source", None)
     }
-#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
-

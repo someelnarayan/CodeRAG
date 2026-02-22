@@ -1,4 +1,4 @@
-from setting.settings import CHUNK_SIZEE as CHUNK_SIZE, CHUNK_OVERLAP
+from setting.settings import CHUNK_SIZE, CHUNK_OVERLAP
 
 def chunk_texts(text):
     chunks = []

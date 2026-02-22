@@ -1,4 +1,13 @@
 requests
 chromadb
 gitpython
-    
+fastapi
+uvicorn[standard]
+sqlalchemy
+psycopg2-binary
+groq
+redis
+python-dotenv
+slowapi
+limits
+pydantic

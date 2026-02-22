@@ -1,5 +1,6 @@
 from retrieval.keyword import keyword_search
 from retrieval.retriever import retrieve_chunks
+from setting.settings import MAX_RETRIEVAL_CHUNKS
 
 
 def hybrid_retrieve_chunks(repo_id, question, collection):
@@ -17,4 +18,4 @@ def hybrid_retrieve_chunks(repo_id, question, collection):
         "vector": len(vector_chunks)
     }
 
-    return results[:6], sources
+    return results[:MAX_RETRIEVAL_CHUNKS], sources
