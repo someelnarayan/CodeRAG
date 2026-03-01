@@ -174,7 +174,7 @@ def ask_question(repo_url, question):
     repo_name = get_repo_name(repo_url)
     collection = get_collection(repo_name)
 
-    # Try to get from cache first
+    # Try to get from cache first (if Redis configured)
     cache_key = make_cache_key(
         repo_id=repo_name,
         commit_hash="latest",
@@ -183,7 +183,7 @@ def ask_question(repo_url, question):
 
     # Cache hit? Return instantly
     t0 = time.time()
-    cached_answer = redis_client.get(cache_key)
+    cached_answer = redis_client.get(cache_key) if redis_client else None
     t1 = time.time()
     if cached_answer:
         elapsed_ms = (t1-t0)*1000
@@ -228,16 +228,17 @@ def ask_question(repo_url, question):
     
     # Save to cache for next time
     t0 = time.time()
-    try:
-        redis_client.setex(
-            cache_key,
-            REDIS_TTL,
-            answer
-        )
-        elapsed_ms = (time.time()-t0)*1000
-        print(f"Cached in {elapsed_ms:.1f}ms")
-    except Exception as e:
-        print(f"Cache save failed: {e}")
+    if redis_client:
+        try:
+            redis_client.setex(
+                cache_key,
+                REDIS_TTL,
+                answer
+            )
+            elapsed_ms = (time.time()-t0)*1000
+            print(f"Cached in {elapsed_ms:.1f}ms")
+        except Exception as e:
+            print(f"Cache save failed: {e}")
 
     # Determine which sources were used
     if sources.get("keyword", 0) > 0:

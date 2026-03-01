@@ -11,3 +11,10 @@ python-dotenv
 slowapi
 limits
 pydantic
+passlib[bcrypt]
+bcrypt
+pytest
+alembic
+black
+ruff
+mypy

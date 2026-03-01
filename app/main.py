@@ -16,6 +16,7 @@ load_dotenv()
 from core import ingest_from_git, ask_question
 from auth.auth import authenticate_user, create_access_token, get_current_user
 from auth.models import Token
+from utils.password_utils import hash_password
 
 from db.database import engine, Base, SessionLocal
 from sqlalchemy import text
@@ -66,7 +67,8 @@ def ensure_db_schema():
 def health_check(db: Session = Depends(get_db)):
     try:
         db.execute(text("SELECT 1"))
-        redis_client.ping()
+        if redis_client:
+            redis_client.ping()
         return {"status": "healthy"}
     except Exception as e:
         return {"status": "unhealthy", "error": str(e)}
@@ -172,8 +174,9 @@ def signup(username: str, password: str):
     try:
         if db.query(User).filter(User.username == username).first():
             raise HTTPException(status_code=400, detail="Username exists")
-
-        user = User(username=username, password_hash=password)
+        # Hash the password before storing
+        pw_hash = hash_password(password)
+        user = User(username=username, password_hash=pw_hash)
         db.add(user)
         db.commit()
         db.refresh(user)

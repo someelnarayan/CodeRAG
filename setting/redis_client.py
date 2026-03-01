@@ -8,9 +8,11 @@ load_dotenv()
 REDIS_URL = os.getenv("REDIS_URL")
 
 if not REDIS_URL:
-    raise RuntimeError("REDIS_URL is not set in .env file")
-
-redis_client = redis.Redis.from_url(
-    REDIS_URL,
-    decode_responses=True
-)
+    # Do not crash at import time; allow running without Redis for local/dev setups.
+    print("WARNING: REDIS_URL not set — Redis cache disabled")
+    redis_client = None
+else:
+    redis_client = redis.Redis.from_url(
+        REDIS_URL,
+        decode_responses=True
+    )

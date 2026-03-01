@@ -49,6 +49,18 @@ services:
   #   ports:
   #     - "6379:6379"
 
+  web:
+    build: .
+    container_name: code-ragg-web
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - SECRET_KEY=${SECRET_KEY}
+    depends_on:
+      - ollama
+
 volumes:
   ollama_data:
     driver: local

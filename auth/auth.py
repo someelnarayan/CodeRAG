@@ -3,15 +3,18 @@ from datetime import datetime, timedelta
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from db.database import SessionLocal
-from db.model import User              
+from db.model import User
+import os
+
+from utils.password_utils import verify_password
 
 # =========================
 # CONFIG
 # =========================
 
-SECRET_KEY = "SUPER_SECRET_KEY_CHANGE_ME"
+SECRET_KEY = os.getenv("SECRET_KEY", "SUPER_SECRET_KEY_CHANGE_ME")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
@@ -49,8 +52,8 @@ def authenticate_user(username: str, password: str):
         if not user:
             return False
 
-        # ⚠️ DEMO comparison – unchanged as requested
-        if user.password_hash != password:
+        # Use secure password verification (bcrypt via passlib)
+        if not verify_password(password, user.password_hash):
             return False
 
         return {
@@ -63,8 +66,6 @@ def authenticate_user(username: str, password: str):
 # =========================
 # TOKEN VERIFICATION (PROTECT ROUTES)
 # =========================
-
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 def get_current_user(token: str = Depends(oauth2_scheme)):
     credentials_exception = HTTPException(
