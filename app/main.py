@@ -169,30 +169,124 @@ def process_question(task_id: str, repo_url: str, question: str, user_id: int):
 # AUTH
 # =========================
 @app.post("/auth/signup")
-def signup(username: str, password: str):
-    db = SessionLocal()
-    try:
-        if db.query(User).filter(User.username == username).first():
-            raise HTTPException(status_code=400, detail="Username exists")
-        # Hash the password before storing
-        pw_hash = hash_password(password)
-        user = User(username=username, password_hash=pw_hash)
-        db.add(user)
-        db.commit()
-        db.refresh(user)
+def signup(
+    username: str,
+    password: str,
+    db: Session = Depends(get_db)
+):
+    # =========================
+    # 1️⃣ USERNAME NORMALIZATION
+    # =========================
+    username = username.strip().lower()
 
-        return {"status": "created", "user_id": user.id}
-    finally:
-        db.close()
+    if not username:
+        raise HTTPException(
+            status_code=400,
+            detail="Username cannot be empty"
+        )
+
+    if " " in username:
+        raise HTTPException(
+            status_code=400,
+            detail="Username cannot contain spaces"
+        )
+
+    # =========================
+    # 2️⃣ PASSWORD VALIDATION
+    # =========================
+    # ❗ password ko strip / modify mat karo
+    if len(password) < 8:
+        raise HTTPException(
+            status_code=400,
+            detail="Password must be at least 8 characters long"
+        )
+
+    # =========================
+    # 3️⃣ CHECK EXISTING USER
+    # =========================
+    existing_user = (
+        db.query(User)
+        .filter(User.username == username)
+        .first()
+    )
+
+    if existing_user:
+        raise HTTPException(
+            status_code=400,
+            detail="Username already exists"
+        )
+
+    # =========================
+    # 4️⃣ HASH PASSWORD
+    # =========================
+    password_hash = hash_password(password)
+
+    # =========================
+    # 5️⃣ CREATE USER
+    # =========================
+    new_user = User(
+        username=username,
+        password_hash=password_hash,
+        created_at=datetime.utcnow()
+    )
+
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    # =========================
+    # 6️⃣ RESPONSE
+    # =========================
+    return {
+        "message": "User created successfully",
+        "user_id": new_user.id,
+        "username": new_user.username
+    }
 
 @app.post("/auth/login", response_model=Token)
 def login(form_data: OAuth2PasswordRequestForm = Depends()):
-    user = authenticate_user(form_data.username, form_data.password)
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+    # =========================
+    # 1️⃣ USERNAME NORMALIZATION
+    # =========================
+    username = form_data.username.strip().lower()
+    password = form_data.password  # ❌ password ko strip mat karo
 
-    token = create_access_token({"sub": user["username"]})
-    return {"access_token": token, "token_type": "bearer"}
+    if not username:
+        raise HTTPException(
+            status_code=400,
+            detail="Username cannot be empty"
+        )
+
+    if " " in username:
+        raise HTTPException(
+            status_code=400,
+            detail="Username cannot contain spaces"
+        )
+
+    # =========================
+    # 2️⃣ AUTHENTICATE USER
+    # =========================
+    user = authenticate_user(username, password)
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid credentials"
+        )
+
+    # =========================
+    # 3️⃣ CREATE TOKEN
+    # =========================
+    token = create_access_token(
+        {"sub": user["username"]}
+    )
+
+    # =========================
+    # 4️⃣ RESPONSE
+    # =========================
+    return {
+        "access_token": token,
+        "token_type": "bearer"
+    }
 
 # =========================
 # INGEST API
