@@ -1,0 +1,12 @@
+venv
+__pycache__
+*.pyc
+.git
+data/repos
+data/chroma_db
+.env
+.env.local
+.dockerignore
+.idea
+.vscode
+.gitignore
