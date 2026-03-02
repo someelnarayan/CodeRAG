@@ -39,6 +39,14 @@ Docker (recommended for deploy)
 - Run with compose (starts services like Ollama if enabled): `docker compose up --build`
 - Use `.dockerignore` to keep images small (large example repos are excluded).
 
+> **Port configuration**
+>
+> When deploying on Render (or any platform providing a dynamic port), the
+> service listens on the port specified by the `PORT` environment variable. The
+> Dockerfile uses a shell command (`uvicorn ... --port ${PORT:-8000}`) so the
+> variable is expanded at runtime and defaults to `8000` locally. Make sure the
+> deployment environment sets `PORT` (Render does this automatically).
+
 Deploy notes (production checklist)
 - Secrets: store `SECRET_KEY`, DB credentials, and `REDIS_URL` in a secrets manager (do not hard-code).
 - Database migrations: use Alembic (generate with `alembic revision --autogenerate -m "initial"` and apply with `alembic upgrade head`).
