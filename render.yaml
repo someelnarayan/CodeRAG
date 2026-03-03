@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: code-ragg-web
+    env: docker
+    plan: starter
+    repo:
+      type: git
+      branch: main
+    buildCommand: docker build -t code-ragg:latest -f ekdocker .
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase: DATABASE_URL
+      - key: REDIS_URL
+        fromDatabase: REDIS_URL
+      - key: SECRET_KEY
+        fromDatabase: SECRET_KEY
+    dockerfilePath: ekdocker
+    autoDeploy: true
+    healthCheckPath: /health
+    instanceType: starter
