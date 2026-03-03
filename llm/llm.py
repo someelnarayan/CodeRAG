@@ -2,10 +2,16 @@ import os
 import requests
 import time
 from groq import Groq
-from setting.settings import OLLAMA_BASE_URL, LLM_MODEL, USE_GROQ
+from setting.settings import (
+    OLLAMA_BASE_URL,
+    LLM_MODEL,
+    USE_GROQ,
+    ENABLE_OLLAMA,
+    OLLAMA_TIMEOUT_SECONDS,
+)
 
-# Ollama runs locally - if it takes > 2 seconds, we'll fall back to Groq
-OLLAMA_TIMEOUT = 2.0
+# Ollama runs locally - use timeout from settings
+OLLAMA_TIMEOUT = float(OLLAMA_TIMEOUT_SECONDS)
 
 
 def generate_answer_local(question, context_chunks, timeout=OLLAMA_TIMEOUT):
@@ -85,35 +91,51 @@ Answer clearly:
 
 def generate_answer(question, context_chunks):
     """
-    Try Ollama first. If it times out or errors, use Groq.
-    If both fail, return a helpful error message.
+    Prefer Groq (cloud) when `USE_GROQ` is enabled. If Groq fails and
+    `ENABLE_OLLAMA` is true, attempt the local Ollama model as a fallback.
+    If `USE_GROQ` is false the function will try Ollama first (if enabled)
+    then Groq.
     """
-    
-    # Try local Ollama first (if not disabled)
-    if not USE_GROQ:
-        print("\nTrying Ollama (local)...")
-        answer, success, elapsed = generate_answer_local(question, context_chunks)
-        
+    # If Groq is primary, try it first
+    if USE_GROQ:
+        print("Trying Groq (cloud)...")
+        answer, success = generate_answer_groq(question, context_chunks)
         if success:
-            print(f"  Got answer in {elapsed:.2f}s")
             return answer
-        elif elapsed < OLLAMA_TIMEOUT:
-            # Error, not timeout
-            print("  Ollama failed, falling back to Groq")
+
+        # Groq failed — attempt local Ollama if allowed
+        if ENABLE_OLLAMA:
+            print("Groq failed — attempting local Ollama as fallback...")
+            answer, success, elapsed = generate_answer_local(question, context_chunks)
+            if success:
+                print(f"  Ollama answered in {elapsed:.2f}s")
+                return answer
+            else:
+                print("  Ollama fallback failed")
+
+        return (
+            "Sorry, I couldn't generate an answer right now. "
+            "Primary cloud LLM (Groq) failed" + (
+                ", and local Ollama fallback is disabled." if not ENABLE_OLLAMA else ", and fallback also failed."
+            )
+        )
+
+    # If USE_GROQ is False, prefer Ollama (if enabled)
+    print("USE_GROQ is disabled — trying Ollama (local) first...")
+    if ENABLE_OLLAMA:
+        answer, success, elapsed = generate_answer_local(question, context_chunks)
+        if success:
+            print(f"  Got answer from Ollama in {elapsed:.2f}s")
+            return answer
         else:
-            # Timeout
-            print(f"  Ollama too slow ({elapsed:.2f}s), trying Groq instead")
-    
-    # Fallback to Groq
+            print("  Ollama failed — falling back to Groq...")
+
+    # Finally try Groq
     print("Trying Groq (cloud)...")
     answer, success = generate_answer_groq(question, context_chunks)
-    
     if success:
         return answer
-    
-    # Both failed
+
     return (
-        "Sorry, I couldn't generate an answer right now. "
-        "Both local Ollama and cloud Groq failed. "
-        "Try again in a moment or check your configuration."
+        "Sorry, I couldn't generate an answer right now. Both local Ollama and cloud Groq failed."
     )

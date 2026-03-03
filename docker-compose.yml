@@ -5,6 +5,7 @@ services:
   ollama:
     image: ollama/ollama:latest
     container_name: ollama-llama31
+    profiles: ['local']
     ports:
       - "11434:11434"
     volumes:

@@ -57,6 +57,15 @@ Deploy notes (production checklist)
 - Monitoring & logging: add structured logs, health/readiness probes, and an error reporting service (e.g., Sentry).
 - Pin dependency versions (`requirements.txt`) and add CI to run tests and linters.
 
+LLM configuration (Groq primary)
+- The service is configured to prefer the cloud Groq LLM by default (`USE_GROQ=true`).
+- To enable a local Ollama instance only for development or as a fallback, set `ENABLE_OLLAMA=true` in your `.env` and run Ollama locally. Do not enable `ENABLE_OLLAMA` in production unless you manage the Ollama host and capacity.
+- Provide your `GROQ_API_KEY` in the environment when `USE_GROQ=true`.
+
+Examples:
+ - Production (Groq primary): `USE_GROQ=true`, `ENABLE_OLLAMA=false`, set `GROQ_API_KEY`.
+ - Local dev with Ollama fallback: `USE_GROQ=true`, `ENABLE_OLLAMA=true`, run Ollama locally at `OLLAMA_HEALTH_URL`.
+
 Testing & CI
 - Tests: `pytest` is configured but the repo does not include application tests by default; add unit/integration tests under `tests/`.
 - CI: add a workflow that installs pinned deps, runs `pytest`, runs linters (`ruff`/`mypy`), and builds the Docker image.
@@ -74,4 +83,10 @@ Next steps I can take for you
 If you want me to proceed with any of the next steps above, tell me which one and I'll implement it.
 
 ***
+Environment helper
+ - A helper script is provided at `tools/merge_env.py` that merges your local `.env` (if present) into `.env.example` and removes duplicate keys. It redacts sensitive values (like `SECRET_KEY` and `GROQ_API_KEY`) to avoid accidentally committing secrets.
+ - Run it from the repo root:
+ ```powershell
+ python tools/merge_env.py
+ ```
 Generated on project scan — edit as needed before sharing.

@@ -8,6 +8,11 @@ OLLAMA_BASE_URL = "http://localhost:11434"
 # Which LLM to use: Groq (cloud) or Ollama (local)
 USE_GROQ = os.getenv("USE_GROQ", "true").lower() in ("1", "true", "yes")
 
+# Allow using Ollama locally as a fallback or for local-only runs.
+# By default Ollama is disabled in production; set ENABLE_OLLAMA=true to
+# allow the service to call a local Ollama instance when needed.
+ENABLE_OLLAMA = os.getenv("ENABLE_OLLAMA", "false").lower() in ("1", "true", "yes")
+
 # Vector database
 CHROMA_PATH = "./data/chroma_db"
 COLLECTION_NAME = "codebase_chunks"

@@ -25,6 +25,7 @@ REDIS_TTL = int(os.getenv("REDIS_TTL", 3600))
 from sqlalchemy import insert, bindparam
 from db.database import SessionLocal
 from db.models.code_chunk import CodeChunk
+from vector.chroma import get_collection
 from sqlalchemy.sql import func
 
 
