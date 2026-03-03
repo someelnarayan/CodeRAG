@@ -18,9 +18,9 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy pinned requirements and install (use the project's requirement.txt)
-COPY requirement.txt ./requirement.txt
+COPY requirements.txt ./requirements.txt
 RUN python -m pip install --upgrade pip && \
-    pip install --no-cache-dir -r requirement.txt
+    pip install --no-cache-dir -r requirements.txt
 
 # Create a non-root user and ensure user owns app dir
 RUN useradd -m appuser && chown -R appuser /app
