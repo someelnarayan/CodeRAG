@@ -34,4 +34,4 @@ USER appuser
 EXPOSE 8000
 
 # Run uvicorn binding to the provided PORT (defaults to 8000 locally)
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port $PORT"]
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-10000}"]
