@@ -18,7 +18,7 @@ Repository layout (key files)
 - `ingestion/`, `embeddings/`, `llm/`, `retrieval/`, `vector/`: pipeline components.
 - `setting/`: configuration and `redis_client.py`.
 - `Dockerfile`, `docker-compose.yml`: container definitions for local/dev runs.
-- `requirement.txt`: pinned Python dependencies for reproducible installs.
+- `requirements.txt`: pinned Python dependencies for reproducible installs.
 - `.env.example`: example environment variables for deployment.
 - `alembic/`: migration scaffold (use Alembic for schema changes).
 
@@ -27,7 +27,7 @@ Quick start (development)
    - Copy `.env.example` to `.env` and fill values for `DATABASE_URL`, `REDIS_URL`, `SECRET_KEY`.
 2. Create and activate a venv, then install deps:
    ```powershell
-   & 'D:\hp\Desktop\pro1\venv\Scripts\python.exe' -m pip install -r requirement.txt
+   & 'D:\hp\Desktop\pro1\venv\Scripts\python.exe' -m pip install -r requirements.txt
    ```
 3. Run the app locally:
    ```powershell
@@ -55,7 +55,7 @@ Deploy notes (production checklist)
 - Vector store: Chroma currently uses local files — for high availability use a managed vector DB or persistent storage volume.
 - Background tasks: ingestion is implemented using FastAPI background tasks — consider moving to a worker queue (Celery/RQ) for scale.
 - Monitoring & logging: add structured logs, health/readiness probes, and an error reporting service (e.g., Sentry).
-- Pin dependency versions (`requirement.txt`) and add CI to run tests and linters.
+- Pin dependency versions (`requirements.txt`) and add CI to run tests and linters.
 
 Testing & CI
 - Tests: `pytest` is configured but the repo does not include application tests by default; add unit/integration tests under `tests/`.

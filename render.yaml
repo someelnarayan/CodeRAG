@@ -6,7 +6,7 @@ services:
     repo:
       type: git
       branch: main
-    buildCommand: docker build -t code-ragg:latest -f ekdocker .
+    buildCommand: docker build -t code-ragg:latest .
     envVars:
       - key: DATABASE_URL
         fromDatabase: DATABASE_URL
@@ -14,7 +14,7 @@ services:
         fromDatabase: REDIS_URL
       - key: SECRET_KEY
         fromDatabase: SECRET_KEY
-    dockerfilePath: ekdocker
+    dockerfilePath: Dockerfile
     autoDeploy: true
     healthCheckPath: /health
     instanceType: starter
