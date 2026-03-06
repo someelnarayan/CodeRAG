@@ -26,35 +26,13 @@ class EmbeddingLoader:
             return
         self._initialized = True
 
+        self.embedding_model = None   # ✅ CHANGE 1 (lazy loading)
+        self.is_ollama = USE_OLLAMA
+
         if USE_OLLAMA:
             print("[EMBEDDING] Using Ollama embeddings (nomic-embed-text)...")
-            try:
-                import requests
-                from setting.settings import OLLAMA_BASE_URL
-
-                # Test connection to Ollama
-                health_url = f"{OLLAMA_BASE_URL}/api/tags"
-                try:
-                    requests.get(health_url, timeout=2)
-                    print(f"[EMBEDDING] Ollama is available at {OLLAMA_BASE_URL}")
-                except Exception as e:
-                    print(
-                        f"[EMBEDDING] WARNING: Ollama not available at {OLLAMA_BASE_URL}: {e}"
-                    )
-
-                # Use simple requests-based embedder for Ollama
-                self.embedding_model = self._create_ollama_embedder()
-                self.is_ollama = True
-
-            except Exception as e:
-                print(f"[EMBEDDING] Failed to load Ollama embeddings: {e}")
-                print("[EMBEDDING] Falling back to SentenceTransformer...")
-                self.embedding_model = self._create_sentence_transformer()
-                self.is_ollama = False
         else:
             print("[EMBEDDING] Using SentenceTransformer embeddings (all-MiniLM-L6-v2)...")
-            self.embedding_model = self._create_sentence_transformer()
-            self.is_ollama = False
 
     @staticmethod
     def _create_ollama_embedder():
@@ -77,45 +55,51 @@ class EmbeddingLoader:
     @staticmethod
     def _create_sentence_transformer():
         """Create a SentenceTransformer embedder."""
-        try:
-            from sentence_transformers import SentenceTransformer
+        from sentence_transformers import SentenceTransformer
 
-            model = SentenceTransformer("all-MiniLM-L6-v2")
+        # ✅ CHANGE 2 (CPU optimized + low memory)
+        model = SentenceTransformer(
+            "sentence-transformers/all-MiniLM-L6-v2",
+            device="cpu"
+        )
 
-            def embed_text(text: str):
-                embedding = model.encode(text, convert_to_tensor=False)
-                return embedding.tolist()
+        def embed_text(text: str):
+            embedding = model.encode(text, convert_to_tensor=False)
+            return embedding.tolist()
 
-            return embed_text
-
-        except ImportError:
-            raise ImportError(
-                "SentenceTransformer not installed. Install with: "
-                "pip install sentence-transformers"
-            )
+        return embed_text
 
     def embed(self, text: str):
         """Embed text using the configured model."""
+
+        # ✅ CHANGE 3 (lazy load here instead of startup)
+        if self.embedding_model is None:
+            if self.is_ollama:
+                self.embedding_model = self._create_ollama_embedder()
+            else:
+                self.embedding_model = self._create_sentence_transformer()
+
         return self.embedding_model(text)
 
     def get_chroma_embedding_function(self):
         """Get a ChromaDB-compatible embedding function."""
-        if self.is_ollama:
-            # For Ollama, ChronaDB will call the embedder with default settings
-            from chromadb.utils import embedding_functions
 
+        # ✅ CHANGE 4 (avoid double model loading)
+        from chromadb.utils import embedding_functions
+
+        if self.is_ollama:
             from setting.settings import EMBED_MODEL, OLLAMA_BASE_URL
 
             return embedding_functions.OllamaEmbeddingFunction(
                 url=OLLAMA_BASE_URL, model_name=EMBED_MODEL
             )
         else:
-            # For SentenceTransformer
-            from chromadb.utils import embedding_functions
 
-            return embedding_functions.SentenceTransformerEmbeddingFunction(
-                model_name="all-MiniLM-L6-v2"
-            )
+            class CustomEmbeddingFunction:
+                def __call__(self, texts):
+                    return [embed_text(t) for t in texts]
+
+            return CustomEmbeddingFunction()
 
 
 # Singleton instance
