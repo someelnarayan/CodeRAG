@@ -66,6 +66,13 @@ Examples:
  - Production (Groq primary): `USE_GROQ=true`, `ENABLE_OLLAMA=false`, set `GROQ_API_KEY`.
  - Local dev with Ollama fallback: `USE_GROQ=true`, `ENABLE_OLLAMA=true`, run Ollama locally at `OLLAMA_HEALTH_URL`.
 
+Embedding layer configuration
+- **Local development**: set `USE_OLLAMA=true` to use Ollama embeddings (nomic-embed-text). Requires a running Ollama instance.
+- **Production (Render)**: set `USE_OLLAMA=false` (default in Dockerfile) to use **SentenceTransformer embeddings** (all-MiniLM-L6-v2). This pure Python model requires no external service.
+- The embedding system automatically switches based on the `USE_OLLAMA` env variable; no code changes needed.
+- For local use, run Ollama alongside the app: `docker compose --profile local up`.
+- For Render (or any managed cloud platform where Ollama is unavailable), the SentenceTransformer model is downloaded and cached locally on first use (~40 MB).
+
 Testing & CI
 - Tests: `pytest` is configured but the repo does not include application tests by default; add unit/integration tests under `tests/`.
 - CI: add a workflow that installs pinned deps, runs `pytest`, runs linters (`ruff`/`mypy`), and builds the Docker image.

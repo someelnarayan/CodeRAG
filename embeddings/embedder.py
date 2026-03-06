@@ -1,9 +1,9 @@
-import requests
-from setting.settings import OLLAMA_BASE_URL, EMBED_MODEL
+"""Embedding function that delegates to utils.embedding_loader.
 
-def embed_text(text):
-    r = requests.post(
-        f"{OLLAMA_BASE_URL}/api/embeddings",
-        json={"model": EMBED_MODEL, "prompt": text}
-    )
-    return r.json()["embedding"]
+This module provides backward compatibility. Use utils.embedding_loader directly
+for new code.
+"""
+
+from utils.embedding_loader import embed_text
+
+__all__ = ["embed_text"]

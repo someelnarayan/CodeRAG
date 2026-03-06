@@ -33,5 +33,8 @@ USER appuser
 # Render provides a dynamic port via the $PORT env variable.
 EXPOSE 8000
 
+# Set embedding mode to production (SentenceTransformer) unless overridden
+ENV USE_OLLAMA=false
+
 # Run uvicorn binding to the provided PORT (defaults to 8000 locally)
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-10000}"]
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

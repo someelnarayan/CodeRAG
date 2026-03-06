@@ -95,6 +95,7 @@ rich==14.3.2
 rpds-py==0.30.0
 rsa==4.9.1
 ruff==0.15.4
+sentence-transformers==3.0.1
 shellingham==1.5.4
 six==1.17.0
 slowapi==0.1.9
