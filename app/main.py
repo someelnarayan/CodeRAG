@@ -10,6 +10,8 @@ from dotenv import load_dotenv
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+import os
+import uvicorn
 
 load_dotenv()
 
@@ -379,3 +381,10 @@ def get_result(
         "answer": task.answer,
         "source": task.source
     }
+
+# =========================
+# SERVER START (RENDER FIX)
+# =========================
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port)
