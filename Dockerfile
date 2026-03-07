@@ -25,16 +25,16 @@ RUN python -m pip install --upgrade pip && \
 # Create a non-root user and ensure user owns app dir
 RUN useradd -m appuser && chown -R appuser /app
 
-# Copy project files (uses .dockerignore to avoid large examples)
+# Copy project files
 COPY . .
 
 USER appuser
 
-# Render provides a dynamic port via the $PORT env variable.
-EXPOSE 8000
+# Render dynamic port
+EXPOSE 10000
 
-# Set embedding mode to production (SentenceTransformer) unless overridden
+# Production embedding mode
 ENV USE_OLLAMA=false
 
-# Run uvicorn binding to the provided PORT (defaults to 8000 locally)
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# Start FastAPI server
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-10000}"]
