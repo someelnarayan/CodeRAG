@@ -24,7 +24,6 @@ from sqlalchemy import text
 
 from setting.redis_client import redis_client
 
-# ✅ REQUIRED IMPORT
 from db.model import Repository, QATask, User
 
 from utils.db_session import get_db
@@ -170,61 +169,26 @@ def process_question(task_id: str, repo_url: str, question: str, user_id: int):
 # AUTH
 # =========================
 @app.post("/auth/signup")
-def signup(
-    username: str,
-    password: str,
-    db: Session = Depends(get_db)
-):
-    # =========================
-    # 1️⃣ USERNAME NORMALIZATION
-    # =========================
+def signup(username: str, password: str, db: Session = Depends(get_db)):
+
     username = username.strip().lower()
 
     if not username:
-        raise HTTPException(
-            status_code=400,
-            detail="Username cannot be empty"
-        )
+        raise HTTPException(status_code=400, detail="Username cannot be empty")
 
     if " " in username:
-        raise HTTPException(
-            status_code=400,
-            detail="Username cannot contain spaces"
-        )
+        raise HTTPException(status_code=400, detail="Username cannot contain spaces")
 
-    # =========================
-    # 2️⃣ PASSWORD VALIDATION
-    # =========================
-    # ❗ password ko strip / modify mat karo
     if len(password) < 8:
-        raise HTTPException(
-            status_code=400,
-            detail="Password must be at least 8 characters long"
-        )
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters long")
 
-    # =========================
-    # 3️⃣ CHECK EXISTING USER
-    # =========================
-    existing_user = (
-        db.query(User)
-        .filter(User.username == username)
-        .first()
-    )
+    existing_user = db.query(User).filter(User.username == username).first()
 
     if existing_user:
-        raise HTTPException(
-            status_code=400,
-            detail="Username already exists"
-        )
+        raise HTTPException(status_code=400, detail="Username already exists")
 
-    # =========================
-    # 4️⃣ HASH PASSWORD
-    # =========================
     password_hash = hash_password(password)
 
-    # =========================
-    # 5️⃣ CREATE USER
-    # =========================
     new_user = User(
         username=username,
         password_hash=password_hash,
@@ -235,9 +199,6 @@ def signup(
     db.commit()
     db.refresh(new_user)
 
-    # =========================
-    # 6️⃣ RESPONSE
-    # =========================
     return {
         "message": "User created successfully",
         "user_id": new_user.id,
@@ -246,44 +207,23 @@ def signup(
 
 @app.post("/auth/login", response_model=Token)
 def login(form_data: OAuth2PasswordRequestForm = Depends()):
-    # =========================
-    # 1️⃣ USERNAME NORMALIZATION
-    # =========================
+
     username = form_data.username.strip().lower()
-    password = form_data.password  # ❌ password ko strip mat karo
+    password = form_data.password
 
     if not username:
-        raise HTTPException(
-            status_code=400,
-            detail="Username cannot be empty"
-        )
+        raise HTTPException(status_code=400, detail="Username cannot be empty")
 
     if " " in username:
-        raise HTTPException(
-            status_code=400,
-            detail="Username cannot contain spaces"
-        )
+        raise HTTPException(status_code=400, detail="Username cannot contain spaces")
 
-    # =========================
-    # 2️⃣ AUTHENTICATE USER
-    # =========================
     user = authenticate_user(username, password)
+
     if not user:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid credentials"
-        )
+        raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    # =========================
-    # 3️⃣ CREATE TOKEN
-    # =========================
-    token = create_access_token(
-        {"sub": user["username"]}
-    )
+    token = create_access_token({"sub": user["username"]})
 
-    # =========================
-    # 4️⃣ RESPONSE
-    # =========================
     return {
         "access_token": token,
         "token_type": "bearer"
@@ -294,13 +234,12 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()):
 # =========================
 @app.post("/ingest")
 @limiter.limit("3/minute")
-def ingest(
-    req: IngestRequest,
-    background_tasks: BackgroundTasks,
-    request: Request,
-    user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
+def ingest(req: IngestRequest,
+           background_tasks: BackgroundTasks,
+           request: Request,
+           user: dict = Depends(get_current_user),
+           db: Session = Depends(get_db)):
+
     repo = db.query(Repository).filter(
         Repository.repo_url == req.repo_url,
         Repository.user_id == user["id"]
@@ -329,13 +268,12 @@ def ingest(
 # =========================
 @app.post("/ask")
 @limiter.limit("10/minute")
-def ask(
-    req: AskRequest,
-    background_tasks: BackgroundTasks,
-    request: Request,
-    user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
+def ask(req: AskRequest,
+        background_tasks: BackgroundTasks,
+        request: Request,
+        user: dict = Depends(get_current_user),
+        db: Session = Depends(get_db)):
+
     task_id = str(uuid.uuid4())
 
     task = QATask(
@@ -345,6 +283,7 @@ def ask(
         question=req.question,
         status="processing"
     )
+
     db.add(task)
     db.commit()
 
@@ -362,11 +301,10 @@ def ask(
 # RESULT API
 # =========================
 @app.get("/result/{task_id}")
-def get_result(
-    task_id: str,
-    user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
+def get_result(task_id: str,
+               user: dict = Depends(get_current_user),
+               db: Session = Depends(get_db)):
+
     task = db.query(QATask).filter(
         QATask.task_id == task_id,
         QATask.user_id == user["id"]
@@ -386,4 +324,4 @@ def get_result(
 # =========================
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port)
+    uvicorn.run(app, host="0.0.0.0", port=port)
