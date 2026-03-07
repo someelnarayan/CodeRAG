@@ -84,23 +84,19 @@ class EmbeddingLoader:
     def get_chroma_embedding_function(self):
         """Get a ChromaDB-compatible embedding function."""
 
-        # ✅ CHANGE 4 (avoid double model loading)
-        from chromadb.utils import embedding_functions
-
         if self.is_ollama:
             from setting.settings import EMBED_MODEL, OLLAMA_BASE_URL
+            from chromadb.utils import embedding_functions
 
             return embedding_functions.OllamaEmbeddingFunction(
                 url=OLLAMA_BASE_URL, model_name=EMBED_MODEL
             )
         else:
+            from chromadb.utils import embedding_functions
 
-            class CustomEmbeddingFunction:
-                name = "custom_sentence_transformer"
-                def __call__(self, texts):
-                    return [embed_text(t) for t in texts]
-
-            return CustomEmbeddingFunction()
+            return embedding_functions.SentenceTransformerEmbeddingFunction(
+                model_name="all-MiniLM-L6-v2"
+            )
 
 
 # Singleton instance
