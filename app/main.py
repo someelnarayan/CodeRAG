@@ -4,7 +4,6 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, validator
 from sqlalchemy.orm import Session
 import uuid
-import time
 from datetime import datetime
 from dotenv import load_dotenv
 from slowapi import Limiter

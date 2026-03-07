@@ -19,8 +19,7 @@ Repository layout (key files)
 - `setting/`: configuration and `redis_client.py`.
 - `Dockerfile`, `docker-compose.yml`: container definitions for local/dev runs.
 - `requirements.txt`: pinned Python dependencies for reproducible installs.
-- `.env.example`: example environment variables for deployment.
-- `alembic/`: migration scaffold (use Alembic for schema changes).
+- `.env`: environment configuration (secrets excluded from version control).
 
 Quick start (development)
 1. Copy environment file and set secrets:
@@ -49,7 +48,7 @@ Docker (recommended for deploy)
 
 Deploy notes (production checklist)
 - Secrets: store `SECRET_KEY`, DB credentials, and `REDIS_URL` in a secrets manager (do not hard-code).
-- Database migrations: use Alembic (generate with `alembic revision --autogenerate -m "initial"` and apply with `alembic upgrade head`).
+- Database schema: the app creates tables automatically via SQLAlchemy on startup (`Base.metadata.create_all()`).
 - Passwords: the app uses `passlib` (bcrypt) for hashing; ensure existing users are migrated if you previously stored plaintext.
 - Caching: Redis is optional — when `REDIS_URL` is unset the service runs without caching.
 - Vector store: Chroma currently uses local files — for high availability use a managed vector DB or persistent storage volume.
@@ -79,21 +78,11 @@ Testing & CI
 
 Files you should review before deploying
 - `auth/auth.py` — ensure `SECRET_KEY` comes from environment and password hashing is enabled.
-- `db/database.py` & `alembic/env.py` — point Alembic `sqlalchemy.url` to your production DB before running migrations.
+- `db/database.py` — verify your database connection string is correctly configured for production.
 - `docker-compose.yml` and `Dockerfile` — verify which services (Ollama, Postgres, Redis) you want Render/Kubernetes to run.
 
 Next steps I can take for you
-- Generate and apply an Alembic initial migration.
 - Create a GitHub Actions CI workflow (tests, lint, build and publish image).
 - Add a Render/GCP/AWS deployment manifest and secrets guide.
 
 If you want me to proceed with any of the next steps above, tell me which one and I'll implement it.
-
-***
-Environment helper
- - A helper script is provided at `tools/merge_env.py` that merges your local `.env` (if present) into `.env.example` and removes duplicate keys. It redacts sensitive values (like `SECRET_KEY` and `GROQ_API_KEY`) to avoid accidentally committing secrets.
- - Run it from the repo root:
- ```powershell
- python tools/merge_env.py
- ```
-Generated on project scan — edit as needed before sharing.
