@@ -96,6 +96,7 @@ class EmbeddingLoader:
         else:
 
             class CustomEmbeddingFunction:
+                name = "custom_sentence_transformer"
                 def __call__(self, texts):
                     return [embed_text(t) for t in texts]
 
