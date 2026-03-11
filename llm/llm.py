@@ -6,7 +6,7 @@ import time
 
 from groq import Groq
 
-from setting.settings import OLLAMA_BASE_URL, LLM_MODEL, USE_GROQ
+from setting.settings import OLLAMA_BASE_URL, LLM_MODEL, USE_GROQ, USE_OLLAMA
 
 
 GROQ_TIMEOUT = 4
@@ -120,7 +120,7 @@ def generate_answer(question, context_chunks):
     print("\nTrying Groq (primary)...")
 
     # Try Groq first
-    answer, success, elapsed = generate_answer_groq(question, context_chunks)
+    answer, success = generate_answer_groq(question, context_chunks)
 
     if success:
         return answer

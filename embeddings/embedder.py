@@ -1,12 +1,8 @@
-# embeddings/embedder.py
-
+import os
 import requests
-from sentence_transformers import SentenceTransformer
+from setting.settings import USE_OLLAMA, OLLAMA_BASE_URL, EMBED_MODEL
 
-from setting.settings import OLLAMA_BASE_URL, EMBED_MODEL, USE_OLLAMA
-
-
-_sentence_model = None
+JINA_API_KEY = os.getenv("JINA_API_KEY")
 
 
 def embed_text(text: str):
@@ -14,9 +10,9 @@ def embed_text(text: str):
     if not text:
         return []
 
-    # =============================
+    # -------------------------
     # LOCAL → OLLAMA
-    # =============================
+    # -------------------------
     if USE_OLLAMA:
 
         try:
@@ -37,20 +33,36 @@ def embed_text(text: str):
         except Exception as e:
 
             print(f"Ollama embedding error: {e}")
+
             return []
 
-    # =============================
-    # PRODUCTION → SENTENCE TRANSFORMER
-    # =============================
+    # -------------------------
+    # PRODUCTION → JINA API
+    # -------------------------
 
-    global _sentence_model
+    try:
 
-    if _sentence_model is None:
+        r = requests.post(
+            "https://api.jina.ai/v1/embeddings",
+            headers={
+                "Authorization": f"Bearer {JINA_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "jina-embeddings-v2-base-en",
+                "input": text
+            },
+            timeout=10
+        )
 
-        print("Loading embedding model (all-MiniLM-L6-v2)...")
+        r.raise_for_status()
 
-        _sentence_model = SentenceTransformer("all-MiniLM-L6-v2")
+        data = r.json()
 
-    embedding = _sentence_model.encode(text, normalize_embeddings=True)
+        return data["data"][0]["embedding"]
 
-    return embedding.tolist()
+    except Exception as e:
+
+        print(f"Jina embedding error: {e}")
+
+        return []
