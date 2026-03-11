@@ -4,12 +4,12 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, validator
 from sqlalchemy.orm import Session
 import uuid
-import time
 from datetime import datetime
 from dotenv import load_dotenv
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+import traceback
 
 load_dotenv()
 
@@ -23,7 +23,6 @@ from sqlalchemy import text
 
 from setting.redis_client import redis_client
 
-# ✅ REQUIRED IMPORT
 from db.model import Repository, QATask, User
 
 from utils.db_session import get_db
@@ -38,6 +37,7 @@ app = FastAPI()
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 
+
 @app.exception_handler(RateLimitExceeded)
 async def rate_limit_handler(request, exc):
     return JSONResponse(
@@ -45,10 +45,12 @@ async def rate_limit_handler(request, exc):
         content={"detail": "Rate limit exceeded"}
     )
 
+
 # =========================
 # DB INIT
 # =========================
 Base.metadata.create_all(bind=engine)
+
 
 @app.on_event("startup")
 def ensure_db_schema():
@@ -59,6 +61,7 @@ def ensure_db_schema():
             )
     except Exception as e:
         print("DB migration error:", repr(e))
+
 
 # =========================
 # HEALTH
@@ -73,6 +76,7 @@ def health_check(db: Session = Depends(get_db)):
     except Exception as e:
         return {"status": "unhealthy", "error": str(e)}
 
+
 # =========================
 # REQUEST MODELS
 # =========================
@@ -85,16 +89,21 @@ class IngestRequest(BaseModel):
             raise ValueError("repo_url required")
         return v.strip()
 
+
 class AskRequest(BaseModel):
     repo_url: str
     question: str
+
 
 # =========================
 # BACKGROUND INGEST
 # =========================
 def ingest_with_status(repo_url: str, user_id: int):
+
     db = SessionLocal()
+
     try:
+
         repo = db.query(Repository).filter(
             Repository.repo_url == repo_url,
             Repository.user_id == user_id
@@ -114,30 +123,42 @@ def ingest_with_status(repo_url: str, user_id: int):
 
         if repo.last_commit_hash is None:
             repo.commit_status = "first_time"
+
         elif repo.last_commit_hash == new_hash:
             repo.commit_status = "same_repo"
+
         else:
             repo.commit_status = "updated"
 
         repo.last_commit_hash = new_hash
         repo.progress = 100
         repo.status = "completed"
+
         db.commit()
 
-    except Exception:
+    except Exception as e:
+
+        print("INGEST ERROR:")
+        traceback.print_exc()
+
         if repo:
             repo.status = "failed"
             repo.commit_status = "failed"
             db.commit()
+
     finally:
         db.close()
+
 
 # =========================
 # BACKGROUND Q&A
 # =========================
 def process_question(task_id: str, repo_url: str, question: str, user_id: int):
+
     db = SessionLocal()
+
     try:
+
         task = db.query(QATask).filter(
             QATask.task_id == task_id,
             QATask.user_id == user_id
@@ -146,9 +167,12 @@ def process_question(task_id: str, repo_url: str, question: str, user_id: int):
         if not task:
             return
 
+        print("Processing question:", question)
+
         result = ask_question(repo_url, question)
 
         task.status = "completed"
+
         if isinstance(result, dict):
             task.answer = result.get("answer")
             task.source = result.get("source")
@@ -156,74 +180,46 @@ def process_question(task_id: str, repo_url: str, question: str, user_id: int):
             task.answer = result
 
         task.completed_at = datetime.utcnow()
+
         db.commit()
 
     except Exception as e:
+
+        print("QA ERROR:")
+        traceback.print_exc()
+
         task.status = "failed"
         task.answer = str(e)
         db.commit()
+
     finally:
         db.close()
+
 
 # =========================
 # AUTH
 # =========================
 @app.post("/auth/signup")
-def signup(
-    username: str,
-    password: str,
-    db: Session = Depends(get_db)
-):
-    # =========================
-    # 1️⃣ USERNAME NORMALIZATION
-    # =========================
+def signup(username: str, password: str, db: Session = Depends(get_db)):
+
     username = username.strip().lower()
 
     if not username:
-        raise HTTPException(
-            status_code=400,
-            detail="Username cannot be empty"
-        )
+        raise HTTPException(status_code=400, detail="Username cannot be empty")
 
     if " " in username:
-        raise HTTPException(
-            status_code=400,
-            detail="Username cannot contain spaces"
-        )
+        raise HTTPException(status_code=400, detail="Username cannot contain spaces")
 
-    # =========================
-    # 2️⃣ PASSWORD VALIDATION
-    # =========================
-    # ❗ password ko strip / modify mat karo
     if len(password) < 8:
-        raise HTTPException(
-            status_code=400,
-            detail="Password must be at least 8 characters long"
-        )
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters long")
 
-    # =========================
-    # 3️⃣ CHECK EXISTING USER
-    # =========================
-    existing_user = (
-        db.query(User)
-        .filter(User.username == username)
-        .first()
-    )
+    existing_user = db.query(User).filter(User.username == username).first()
 
     if existing_user:
-        raise HTTPException(
-            status_code=400,
-            detail="Username already exists"
-        )
+        raise HTTPException(status_code=400, detail="Username already exists")
 
-    # =========================
-    # 4️⃣ HASH PASSWORD
-    # =========================
     password_hash = hash_password(password)
 
-    # =========================
-    # 5️⃣ CREATE USER
-    # =========================
     new_user = User(
         username=username,
         password_hash=password_hash,
@@ -234,59 +230,37 @@ def signup(
     db.commit()
     db.refresh(new_user)
 
-    # =========================
-    # 6️⃣ RESPONSE
-    # =========================
     return {
         "message": "User created successfully",
         "user_id": new_user.id,
         "username": new_user.username
     }
 
+
 @app.post("/auth/login", response_model=Token)
 def login(form_data: OAuth2PasswordRequestForm = Depends()):
-    # =========================
-    # 1️⃣ USERNAME NORMALIZATION
-    # =========================
+
     username = form_data.username.strip().lower()
-    password = form_data.password  # ❌ password ko strip mat karo
+    password = form_data.password
 
     if not username:
-        raise HTTPException(
-            status_code=400,
-            detail="Username cannot be empty"
-        )
+        raise HTTPException(status_code=400, detail="Username cannot be empty")
 
     if " " in username:
-        raise HTTPException(
-            status_code=400,
-            detail="Username cannot contain spaces"
-        )
+        raise HTTPException(status_code=400, detail="Username cannot contain spaces")
 
-    # =========================
-    # 2️⃣ AUTHENTICATE USER
-    # =========================
     user = authenticate_user(username, password)
+
     if not user:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid credentials"
-        )
+        raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    # =========================
-    # 3️⃣ CREATE TOKEN
-    # =========================
-    token = create_access_token(
-        {"sub": user["username"]}
-    )
+    token = create_access_token({"sub": user["username"]})
 
-    # =========================
-    # 4️⃣ RESPONSE
-    # =========================
     return {
         "access_token": token,
         "token_type": "bearer"
     }
+
 
 # =========================
 # INGEST API
@@ -300,6 +274,7 @@ def ingest(
     user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+
     repo = db.query(Repository).filter(
         Repository.repo_url == req.repo_url,
         Repository.user_id == user["id"]
@@ -323,6 +298,7 @@ def ingest(
 
     return {"status": "started"}
 
+
 # =========================
 # ASK API
 # =========================
@@ -335,6 +311,7 @@ def ask(
     user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+
     task_id = str(uuid.uuid4())
 
     task = QATask(
@@ -344,6 +321,7 @@ def ask(
         question=req.question,
         status="processing"
     )
+
     db.add(task)
     db.commit()
 
@@ -357,6 +335,7 @@ def ask(
 
     return {"task_id": task_id, "status": "processing"}
 
+
 # =========================
 # RESULT API
 # =========================
@@ -366,6 +345,7 @@ def get_result(
     user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+
     task = db.query(QATask).filter(
         QATask.task_id == task_id,
         QATask.user_id == user["id"]
