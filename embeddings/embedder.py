@@ -8,7 +8,7 @@ JINA_API_KEY = os.getenv("JINA_API_KEY")
 def embed_text(text: str):
 
     if not text:
-        return []
+        return None
 
     # -------------------------
     # LOCAL → OLLAMA
@@ -28,16 +28,21 @@ def embed_text(text: str):
 
             r.raise_for_status()
 
-            return r.json()["embedding"]
+            data = r.json()
+
+            if "embedding" not in data:
+                return None
+
+            return data["embedding"]
 
         except Exception as e:
 
             print(f"Ollama embedding error: {e}")
 
-            return []
+            return None
 
     # -------------------------
-    # PRODUCTION → JINA API
+    # PRODUCTION → JINA
     # -------------------------
 
     try:
@@ -50,7 +55,7 @@ def embed_text(text: str):
             },
             json={
                 "model": "jina-embeddings-v2-base-en",
-                "input": text
+                "input": [text]     # FIX: list input required
             },
             timeout=10
         )
@@ -65,4 +70,4 @@ def embed_text(text: str):
 
         print(f"Jina embedding error: {e}")
 
-        return []
+        return None

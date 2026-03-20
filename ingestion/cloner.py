@@ -1,37 +1,28 @@
-# retrieval/keyword.py
-
-from db.database import SessionLocal
-from db.models.code_chunk import CodeChunk
-import uuid
+import subprocess
+from pathlib import Path
+from utils.files_utils import get_local_repo_path
 
 
-NAMESPACE_UUID = uuid.UUID('6ba7b810-9dad-11d1-80b4-00c04fd430c8')
+def clone_repository(repo_url: str, repo_path: Path | None = None):
+    """
+    Clone a repository if it doesn't exist locally.
+    """
 
+    if repo_path is None:
+        repo_path = get_local_repo_path(repo_url)
 
-def _ensure_uuid(repo_id):
-    if isinstance(repo_id, uuid.UUID):
-        return repo_id
+    repo_path = repo_path.resolve()
 
-    try:
-        return uuid.UUID(str(repo_id))
-    except Exception:
-        return uuid.uuid5(NAMESPACE_UUID, str(repo_id))
+    repo_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # Already cloned
+    if repo_path.exists():
+        return repo_path
 
-def keyword_search(repo_id, query, limit=5):
-    db = SessionLocal()
-    try:
-        repo_uuid = _ensure_uuid(repo_id)
+    # Clone repository
+    subprocess.run(
+        ["git", "clone", "--depth", "1", repo_url, str(repo_path)],
+        check=True
+    )
 
-        results = (
-            db.query(CodeChunk)
-            .filter(CodeChunk.repo_id == repo_uuid)
-            .filter(CodeChunk.content_tsv.match(query))
-            .limit(limit)
-            .all()
-        )
-
-        return results
-
-    finally:
-        db.close()
+    return repo_path

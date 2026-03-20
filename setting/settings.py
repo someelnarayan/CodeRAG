@@ -4,7 +4,7 @@ import os
 # AI Models
 # ==============================
 
-LLM_MODEL = "llama3.1"
+LLM_MODEL = "llama3.1:8b-instruct-q4_K_M  "
 EMBED_MODEL = "nomic-embed-text"
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")

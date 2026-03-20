@@ -1,31 +1,31 @@
-fastapi
-uvicorn[standard]
-requests
+fastapi==0.110.0
+uvicorn[standard]==0.29.0
 
-sqlalchemy
-psycopg2-binary
+requests==2.31.0
 
-chromadb
-sentence-transformers
+sqlalchemy==2.0.29
+psycopg2-binary==2.9.9
 
-gitpython
+chromadb==0.5.0
 
-groq
+gitpython==3.1.43
 
-redis
-python-dotenv
+groq==0.5.0
 
-slowapi
-limits
+redis==5.0.3
+python-dotenv==1.0.1
 
-pydantic
+slowapi==0.1.9
+limits==3.10.0
 
-passlib[bcrypt]
-bcrypt
+pydantic==2.6.4
 
-pytest
-alembic
+passlib==1.7.4
+bcrypt==3.2.2
 
-black
-ruff
-mypy
+pytest==8.1.1
+alembic==1.13.1
+
+black==24.3.0
+ruff==0.3.4
+mypy==1.9.0

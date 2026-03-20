@@ -1,26 +1,66 @@
-# ingestion/cloner.py
+import os
 
-import subprocess
-from pathlib import Path
+IGNORE_DIRS = {
+    ".git",
+    ".github",
+    "tests",
+    "test",
+    "docs",
+    "doc",
+    "__pycache__",
+    "node_modules",
+    "venv",
+    ".venv",
+}
 
-from utils.files_utils import get_local_repo_path
+ALLOWED_EXTENSIONS = {
+    ".py",
+    ".js",
+    ".ts",
+    ".java",
+    ".go",
+    ".cpp",
+    ".c",
+}
 
 
-def clone_repository(repo_url: str, repo_path: Path | None = None):
+def load_repository(repo_path):
+    """
+    Load all supported code files from the repository.
+    Returns a list of {path, content}
+    """
 
-    if repo_path is None:
-        repo_path = get_local_repo_path(repo_url)
+    files = []
 
-    repo_path = repo_path.resolve()
+    for root, dirs, filenames in os.walk(repo_path):
 
-    repo_path.parent.mkdir(parents=True, exist_ok=True)
+        # remove ignored directories
+        dirs[:] = [d for d in dirs if d not in IGNORE_DIRS]
 
-    if repo_path.exists():
-        return repo_path
+        for filename in filenames:
 
-    subprocess.run(
-        ["git", "clone", "--depth", "1", repo_url, str(repo_path)],
-        check=True
-    )
+            ext = os.path.splitext(filename)[1]
 
-    return repo_path
+            if ext not in ALLOWED_EXTENSIONS:
+                continue
+
+            file_path = os.path.join(root, filename)
+
+            try:
+
+                with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+
+                    content = f.read()
+
+                    files.append({
+                        "path": file_path,
+                        "content": content
+                    })
+
+            except Exception as e:
+
+                print(f"Skipped file {file_path}: {e}")
+
+    print(f"Loaded {len(files)} files")
+
+    return files

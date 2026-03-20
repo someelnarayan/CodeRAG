@@ -67,7 +67,7 @@ def ingest_from_git(repo_url, progress_callback=None):
     repo_id_uuid = uuid.uuid5(NAMESPACE_UUID, repo_name)
     
     # Process in batches to avoid slow one-by-one inserts
-    BATCH_SIZE = 500
+    BATCH_SIZE = 1000
     pending_chunks = []
     pending_vectors = {"ids": [], "documents": [], "embeddings": [], "metadatas": []}
 
@@ -90,6 +90,8 @@ def ingest_from_git(repo_url, progress_callback=None):
             
             # Create vector embedding
             embedding = embed_text(chunk)
+            if embedding is None:
+                continue
             chunk_uuid = uuid.uuid4()
 
             # Add to vector batch (Chroma expects string ids)
