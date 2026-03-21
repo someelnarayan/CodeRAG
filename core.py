@@ -40,12 +40,15 @@ def ingest_from_git(repo_url, progress_callback=None):
     repo_name = get_repo_name(repo_url)
     collection = get_collection(repo_name)
 
-    # ⚠️ TEMP: skip disabled so fresh ingest always runs
-    # if collection.count() > 0:
-    #     return {
-    #         "status": "already_indexed",
-    #         "repo": repo_name
-    #     }
+    # Check if repo is already indexed - skip if it exists
+    if collection.count() > 0:
+        print(f"✅ Repository '{repo_name}' already indexed ({collection.count()} chunks)")
+        print("   Skipping re-ingestion. Delete collection if you want to re-ingest.")
+        return {
+            "status": "already_indexed",
+            "repo": repo_name,
+            "chunks_count": collection.count()
+        }
 
     repo_path = get_local_repo_path(repo_url)
 
