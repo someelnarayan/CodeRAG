@@ -1,13 +1,14 @@
 import streamlit as st
 import requests
 import time
+import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
 st.set_page_config(page_title="AI Assistant")
 
-BASE_URL = "http://127.0.0.1:8000"
+BASE_URL = os.getenv("BASE_URL", "http://127.0.0.1:8000")
 
 # =========================
 # SESSION STATE
