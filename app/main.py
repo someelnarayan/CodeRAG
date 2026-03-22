@@ -77,44 +77,6 @@ def health_check(db: Session = Depends(get_db)):
         return {"status": "unhealthy", "error": str(e)}
 
 
-@app.get("/health/groq")
-def test_groq_connection():
-    """Test if Groq API key is valid and working"""
-    try:
-        from llm.llm import groq_client, GROQ_API_KEY
-        
-        if not groq_client:
-            return {
-                "status": "error",
-                "message": "Groq client not initialized",
-                "api_key": "MISSING" if not GROQ_API_KEY else f"{GROQ_API_KEY[:20]}..."
-            }
-        
-        # Try a simple API call to test the key
-        response = groq_client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=[{"role": "user", "content": "Say 'OK'"}],
-            max_tokens=10,
-            timeout=5
-        )
-        
-        return {
-            "status": "ok",
-            "message": "Groq API is working",
-            "api_key": f"{GROQ_API_KEY[:20]}...{GROQ_API_KEY[-4:]}",
-            "response": response.choices[0].message.content
-        }
-    
-    except Exception as e:
-        error_msg = str(e)
-        return {
-            "status": "error",
-            "message": error_msg,
-            "api_key": f"{GROQ_API_KEY[:20]}...{GROQ_API_KEY[-4:]}" if GROQ_API_KEY else "MISSING",
-            "suggestion": "Get a new key from https://console.groq.com" if "401" in error_msg or "invalid" in error_msg.lower() else None
-        }
-
-
 # =========================
 # REQUEST MODELS
 # =========================
@@ -393,46 +355,12 @@ def get_result(
         return {"status": "not_found"}
 
     return {
-        "status": task.status,
-        "answer": task.answer,
-        "source": task.source
-    }
-
-
-# =========================
-# ADMIN - CACHE MANAGEMENT
-# =========================
-@app.delete("/cache/clear")
-def clear_all_cache(user: dict = Depends(get_current_user)):
-    """Clear all cached answers. Useful for debugging."""
-    if not redis_client:
-        return {"status": "redis_not_configured"}
-    
-    try:
-        redis_client.flushdb()
-        return {"status": "success", "message": "All cache cleared"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-
-@app.delete("/cache/clear/{repo_url}")
-def clear_repo_cache(repo_url: str, user: dict = Depends(get_current_user)):
-    """Clear cached answers for a specific repo."""
-    if not redis_client:
-        return {"status": "redis_not_configured"}
-    
-    try:
-        from utils.files_utils import get_local_repo_path
-        repo_name = repo_url.rstrip("/").split("/")[-1].replace(".git", "")
-        
-        # Delete all keys matching this repo
-        pattern = f"cache:*:{repo_name}:*"
-        keys = redis_client.keys(pattern)
-        
-        if keys:
-            redis_client.delete(*keys)
-            return {"status": "success", "message": f"Cleared {len(keys)} cached entries for {repo_name}"}
-        else:
-            return {"status": "success", "message": f"No cache entries found for {repo_name}"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
+    "status": task.status,
+    "message": (
+        "Generating response..." if task.status == "processing"
+        else "Response generated successfully." if task.status == "completed"
+        else "Request failed."
+    ),
+    "answer": task.answer,
+    "source": task.source
+}
