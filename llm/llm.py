@@ -2,45 +2,43 @@
 
 import requests
 import time
+import os
 from dotenv import dotenv_values
 from groq import Groq
 
-from setting.settings import OLLAMA_BASE_URL, LLM_MODEL, USE_GROQ, USE_OLLAMA
-
+from setting.settings import OLLAMA_BASE_URL, LLM_MODEL, USE_OLLAMA
 
 # ==============================
-# 🔥 ENV LOAD (CHECK OS ENV FIRST, THEN .env)
+# ENV LOAD
 # ==============================
-import os
 
 env_config = dotenv_values(".env")
 
-# ✓ Check OS environment variables first (docker-compose sets these)
-# ❌ Fall back to .env file if not found in OS env
-GROQ_API_KEY = (os.getenv("GROQ_API_KEY") or env_config.get("GROQ_API_KEY") or "").strip()
+GROQ_API_KEY = (
+    os.getenv("GROQ_API_KEY")
+    or env_config.get("GROQ_API_KEY")
+    or ""
+).strip()
 
 print("Using GROQ KEY:", GROQ_API_KEY[:10] if GROQ_API_KEY else "None")
 
-
 GROQ_TIMEOUT = 4
 OLLAMA_TIMEOUT = 10
-
 
 # ==============================
 # GROQ INIT
 # ==============================
 
-if not GROQ_API_KEY:
-    print("❌ ERROR: GROQ_API_KEY missing in .env file!")
-    groq_client = None
-else:
+groq_client = None
+
+if GROQ_API_KEY:
     try:
         groq_client = Groq(api_key=GROQ_API_KEY)
-        print("✓ Groq client initialized")
+        print("Groq client initialized successfully")
     except Exception as e:
-        print(f"❌ Groq init failed: {e}")
-        groq_client = None
-
+        print("Groq initialization failed:", str(e))
+else:
+    print("GROQ_API_KEY not found")
 
 # ==============================
 # GROQ PRIMARY
@@ -49,11 +47,11 @@ else:
 def generate_answer_groq(question, context_chunks):
 
     if not groq_client:
-        print("❌ Groq client not available")
+        print("Groq client not available")
         return None, False
 
     if not context_chunks:
-        print("❌ No context chunks provided")
+        print("No context provided")
         return None, False
 
     context = "\n\n".join(context_chunks)
@@ -73,27 +71,25 @@ Answer clearly:
 """
 
     try:
-        t0 = time.time()
+        start_time = time.time()
 
-        print("📤 Sending request to Groq API...")
         response = groq_client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.2,
-            max_tokens=512,
-            timeout=GROQ_TIMEOUT
+            max_tokens=512
         )
 
-        elapsed = time.time() - t0
+        duration = time.time() - start_time
 
         answer = response.choices[0].message.content
 
-        print(f"✅ Groq success in {elapsed:.2f}s")
+        print(f"Groq response received in {duration:.2f}s")
 
         return answer, True
 
     except Exception as e:
-        print(f"❌ Groq API failed: {type(e).__name__}")
+        print("Groq API error:", type(e).__name__)
         return None, False
 
 
@@ -120,9 +116,9 @@ Answer clearly:
 """
 
     try:
-        t0 = time.time()
+        start_time = time.time()
 
-        r = requests.post(
+        response = requests.post(
             f"{OLLAMA_BASE_URL}/api/generate",
             json={
                 "model": LLM_MODEL,
@@ -132,24 +128,23 @@ Answer clearly:
             timeout=OLLAMA_TIMEOUT
         )
 
-        r.raise_for_status()
+        response.raise_for_status()
+        data = response.json()
 
-        data = r.json()
+        duration = time.time() - start_time
 
-        elapsed = time.time() - t0
-
-        print(f"✅ Ollama success in {elapsed:.2f}s")
+        print(f"Ollama response received in {duration:.2f}s")
 
         return data.get("response", ""), True
 
     except requests.exceptions.ConnectionError:
-        print(f"❌ Ollama error: Cannot connect to {OLLAMA_BASE_URL}")
+        print("Ollama connection failed:", OLLAMA_BASE_URL)
         return None, False
     except requests.exceptions.Timeout:
-        print(f"❌ Ollama error: Timeout")
+        print("Ollama request timeout")
         return None, False
     except Exception as e:
-        print(f"❌ Ollama error: {e}")
+        print("Ollama error:", str(e))
         return None, False
 
 
@@ -159,24 +154,21 @@ Answer clearly:
 
 def generate_answer(question, context_chunks):
 
-    print("\n🔵 Attempting Groq (primary)...")
+    print("Trying Groq...")
 
     answer, success = generate_answer_groq(question, context_chunks)
 
     if success:
         return answer
 
-    print("\nGroq failed. Checking fallback options...")
+    print("Groq failed. Trying fallback...")
 
     if USE_OLLAMA:
-        print("🟢 USE_OLLAMA=true → Attempting Ollama...")
         answer, success = generate_answer_local(question, context_chunks)
         if success:
             return answer
-    else:
-        print("⚪ USE_OLLAMA=false → Ollama fallback disabled")
 
     return (
-        "Sorry, I couldn't generate an answer right now. "
-        "Groq failed and Ollama is not enabled."
+        "Sorry, unable to generate answer right now. "
+        "Groq failed and fallback is not available."
     )
