@@ -12,5 +12,6 @@ limits==3.10.0
 gitpython==3.1.43
 chromadb==0.5.0
 passlib[bcrypt]==1.7.4
-bcrypt==3.2.2
 streamlit==1.33.0
+python-jose[cryptography]
+python-multipart==0.0.6

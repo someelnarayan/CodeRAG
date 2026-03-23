@@ -9,13 +9,15 @@ from setting.settings import OLLAMA_BASE_URL, LLM_MODEL, USE_GROQ, USE_OLLAMA
 
 
 # ==============================
-# 🔥 ENV LOAD (STRICT - ONLY .env)
+# 🔥 ENV LOAD (CHECK OS ENV FIRST, THEN .env)
 # ==============================
+import os
 
 env_config = dotenv_values(".env")
 
-# ❌ system env completely ignored
-GROQ_API_KEY = (env_config.get("GROQ_API_KEY") or "").strip()
+# ✓ Check OS environment variables first (docker-compose sets these)
+# ❌ Fall back to .env file if not found in OS env
+GROQ_API_KEY = (os.getenv("GROQ_API_KEY") or env_config.get("GROQ_API_KEY") or "").strip()
 
 print("Using GROQ KEY:", GROQ_API_KEY[:10] if GROQ_API_KEY else "None")
 
