@@ -3,6 +3,7 @@
 import requests
 import time
 import os
+from pathlib import Path
 from dotenv import dotenv_values
 from groq import Groq
 
@@ -12,7 +13,9 @@ from setting.settings import OLLAMA_BASE_URL, LLM_MODEL, USE_OLLAMA
 # ENV LOAD
 # ==============================
 
-env_config = dotenv_values(".env")
+# ✅ FIXED: always read .env from project root
+BASE_DIR = Path(__file__).resolve().parent.parent
+env_config = dotenv_values(BASE_DIR / ".env")
 
 GROQ_API_KEY = (
     os.getenv("GROQ_API_KEY")
@@ -22,7 +25,7 @@ GROQ_API_KEY = (
 
 print("Using GROQ KEY:", GROQ_API_KEY[:10] if GROQ_API_KEY else "None")
 
-GROQ_TIMEOUT = 4
+GROQ_TIMEOUT = 30       # ✅ FIXED: was 4 — too low, caused timeouts
 OLLAMA_TIMEOUT = 10
 
 # ==============================
@@ -77,7 +80,8 @@ Answer clearly:
             model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.2,
-            max_tokens=512
+            max_tokens=512,
+            timeout=GROQ_TIMEOUT
         )
 
         duration = time.time() - start_time
@@ -89,7 +93,7 @@ Answer clearly:
         return answer, True
 
     except Exception as e:
-        print("Groq API error:", type(e).__name__)
+        print("Groq API error:", type(e).__name__, str(e))
         return None, False
 
 

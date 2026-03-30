@@ -311,6 +311,35 @@ def ask(
     user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    # ✅ ADDED: block questions until ingestion is complete
+    repo = db.query(Repository).filter(
+        Repository.repo_url == req.repo_url,
+        Repository.user_id == user["id"]
+    ).first()
+
+    if not repo:
+        raise HTTPException(
+            status_code=400,
+            detail="Repository not found. Please ingest it first."
+        )
+
+    if repo.status == "processing":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Repository is still being ingested ({repo.progress}% complete). Please wait."
+        )
+
+    if repo.status == "failed":
+        raise HTTPException(
+            status_code=400,
+            detail="Repository ingestion failed. Please re-ingest."
+        )
+
+    if repo.status != "completed":
+        raise HTTPException(
+            status_code=400,
+            detail="Repository is not ready yet. Please wait for ingestion to complete."
+        )
 
     task_id = str(uuid.uuid4())
 
@@ -355,12 +384,12 @@ def get_result(
         return {"status": "not_found"}
 
     return {
-    "status": task.status,
-    "message": (
-        "Generating response..." if task.status == "processing"
-        else "Response generated successfully." if task.status == "completed"
-        else "Request failed."
-    ),
-    "answer": task.answer,
-    "source": task.source
-}
+        "status": task.status,
+        "message": (
+            "Generating response..." if task.status == "processing"
+            else "Response generated successfully." if task.status == "completed"
+            else "Request failed."
+        ),
+        "answer": task.answer,
+        "source": task.source
+    }
