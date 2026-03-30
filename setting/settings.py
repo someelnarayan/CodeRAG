@@ -21,7 +21,9 @@ USE_OLLAMA = os.getenv("USE_OLLAMA", "false").lower() in ("1","true","yes")
 # Vector database
 # ==============================
 
-CHROMA_PATH = "./data/chroma_db"
+# ✅ FIXED: absolute path so Chroma reads/writes from the same folder every run
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CHROMA_PATH = os.path.join(BASE_DIR, "data", "chroma_db")
 COLLECTION_NAME = "codebase_chunks"
 
 # ==============================
@@ -35,7 +37,8 @@ CHUNK_OVERLAP = 100
 # File hash storage
 # ==============================
 
-HASH_DIR = "./data/repo_hashes"
+# ✅ FIXED: absolute path for consistency
+HASH_DIR = os.path.join(BASE_DIR, "data", "repo_hashes")
 
 # ==============================
 # Context limits
