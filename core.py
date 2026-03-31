@@ -38,8 +38,10 @@ def ingest_from_git(repo_url, progress_callback=None):
     collection = get_collection(repo_name)
 
     if collection.count() > 0:
-        print(f"✅ Repository '{repo_name}' already indexed ({collection.count()} chunks)")
-        print("   Skipping re-ingestion. Delete collection if you want to re-ingest.")
+        print(f"Repository '{repo_name}' already indexed ({collection.count()} chunks)")
+        print("Skipping re-ingestion. Delete collection if you want to re-ingest.")
+        if progress_callback:
+            progress_callback(100)
         return {
             "status": "already_indexed",
             "repo": repo_name,
@@ -50,14 +52,17 @@ def ingest_from_git(repo_url, progress_callback=None):
 
     print("CLONING REPO...")
     clone_repo(repo_url, repo_path)
+    if progress_callback:
+        progress_callback(5)
 
     print("LOADING FILES...")
     files = load_repo(repo_path)
     print("FILES FOUND:", len(files))
+    if progress_callback:
+        progress_callback(10)
 
     db = SessionLocal()
 
-    total_files = len(files)
     chunk_counter = 0
     file_hashes_seen = set()
 
@@ -69,13 +74,11 @@ def ingest_from_git(repo_url, progress_callback=None):
 
     pending_chunks = []
     pending_vectors = {"ids": [], "documents": [], "embeddings": [], "metadatas": []}
-
     all_chunks_to_embed = []
 
     for idx, file in enumerate(files):
         file_hash = hashlib.md5(file["content"].encode()).hexdigest()
         if file_hash in file_hashes_seen:
-            print(f"\nSkipped (already have): {file['path']}")
             continue
         file_hashes_seen.add(file_hash)
 
@@ -84,7 +87,7 @@ def ingest_from_git(repo_url, progress_callback=None):
             if chunk.strip():
                 all_chunks_to_embed.append((chunk, file["path"]))
 
-    print(f"\nTotal chunks to embed: {len(all_chunks_to_embed)}")
+    print(f"Total chunks to embed: {len(all_chunks_to_embed)}")
 
     total_batches = (len(all_chunks_to_embed) + EMBED_BATCH_SIZE - 1) // EMBED_BATCH_SIZE
 
@@ -94,7 +97,7 @@ def ingest_from_git(repo_url, progress_callback=None):
         batch_paths = [c[1] for c in batch]
 
         current_batch_num = (batch_idx // EMBED_BATCH_SIZE) + 1
-        print(f"  Embedding batch {current_batch_num}/{total_batches} ({len(batch)} chunks)...", end="\r")
+        print(f"Embedding batch {current_batch_num}/{total_batches} ({len(batch)} chunks)...", end="\r")
 
         embeddings = embed_texts_batch(batch_texts)
 
@@ -124,7 +127,7 @@ def ingest_from_git(repo_url, progress_callback=None):
             chunk_counter += 1
 
         if len(pending_chunks) >= BATCH_SIZE:
-            print(f"\n  💾 Saving {len(pending_chunks)} chunks...")
+            print(f"\nSaving {len(pending_chunks)} chunks...")
             stmt = insert(CodeChunk.__table__).values(
                 id=bindparam('id'),
                 repo_id=bindparam('repo_id'),
@@ -141,12 +144,13 @@ def ingest_from_git(repo_url, progress_callback=None):
                 collection.add(**pending_vectors)
                 pending_vectors = {"ids": [], "documents": [], "embeddings": [], "metadatas": []}
 
+        # progress runs from 10% to 95% during embedding
         if progress_callback:
-            progress = int(((batch_idx + EMBED_BATCH_SIZE) / len(all_chunks_to_embed)) * 80)
-            progress_callback(min(progress, 80))
+            progress = 10 + int((current_batch_num / total_batches) * 85)
+            progress_callback(min(progress, 95))
 
     if pending_chunks:
-        print(f"\n   💾 Flushing final {len(pending_chunks)} chunks to DB...")
+        print(f"\nFlushing final {len(pending_chunks)} chunks to DB...")
         stmt = insert(CodeChunk.__table__).values(
             id=bindparam('id'),
             repo_id=bindparam('repo_id'),
@@ -159,7 +163,7 @@ def ingest_from_git(repo_url, progress_callback=None):
         db.commit()
 
     if pending_vectors["ids"]:
-        print(f"\n   💾 Flushing final {len(pending_vectors['ids'])} vectors...")
+        print(f"\nFlushing final {len(pending_vectors['ids'])} vectors...")
         collection.add(**pending_vectors)
 
     db.close()
@@ -181,7 +185,7 @@ def ask_question(repo_url, question):
     repo_name = get_repo_name(repo_url)
     collection = get_collection(repo_name)
 
-    print(f"DEBUG collection='{collection.name}' count={collection.count()} chroma_path={CHROMA_PATH}")
+    print(f"Collection: '{collection.name}' | Chunks: {collection.count()} | Path: {CHROMA_PATH}")
 
     cache_key = make_cache_key(
         repo_id=repo_name,
@@ -193,14 +197,12 @@ def ask_question(repo_url, question):
     cached_answer = redis_client.get(cache_key) if redis_client else None
     t1 = time.time()
     if cached_answer:
-        elapsed_ms = (t1 - t0) * 1000
-        print(f"Cache hit ({elapsed_ms:.1f}ms)")
+        print(f"Cache hit ({(t1-t0)*1000:.1f}ms)")
         return {
             "answer": cached_answer,
             "source": "cache"
         }
-    elapsed_ms = (t1 - t0) * 1000
-    print(f"Cache miss ({elapsed_ms:.1f}ms)")
+    print(f"Cache miss ({(t1-t0)*1000:.1f}ms)")
 
     print("Searching code...")
     t0 = time.time()
@@ -210,9 +212,7 @@ def ask_question(repo_url, question):
         collection=collection
     )
     t1 = time.time()
-    keyword_count = sources.get('keyword', 0)
-    vector_count = sources.get('vector', 0)
-    print(f"Found {len(chunks)} chunks ({keyword_count} keyword, {vector_count} vector) in {(t1 - t0):.2f}s")
+    print(f"Found {len(chunks)} chunks ({sources.get('keyword', 0)} keyword, {sources.get('vector', 0)} vector) in {(t1-t0):.2f}s")
 
     from setting.settings import MAX_CONTEXT_CHARS
     cumulative_chars = 0
@@ -228,15 +228,12 @@ def ask_question(repo_url, question):
     t0 = time.time()
     answer = generate_answer(question, trimmed_chunks)
     t1 = time.time()
-    print(f"Answer generated in {(t1 - t0):.2f}s")
+    print(f"Answer generated in {(t1-t0):.2f}s")
 
-    # ✅ Only cache successful answers, never cache error messages
-    t0 = time.time()
     if redis_client and answer and not answer.startswith("Sorry,"):
         try:
             redis_client.setex(cache_key, REDIS_TTL, answer)
-            elapsed_ms = (time.time() - t0) * 1000
-            print(f"Cached in {elapsed_ms:.1f}ms")
+            print(f"Cached in {(time.time()-t0)*1000:.1f}ms")
         except Exception as e:
             print(f"Cache save failed: {e}")
 

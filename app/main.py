@@ -101,6 +101,7 @@ class AskRequest(BaseModel):
 def ingest_with_status(repo_url: str, user_id: int):
 
     db = SessionLocal()
+    repo = None
 
     try:
 
@@ -113,27 +114,37 @@ def ingest_with_status(repo_url: str, user_id: int):
             return
 
         repo.status = "processing"
-        repo.progress = 50
+        repo.progress = 0
         db.commit()
 
-        ingest_from_git(repo_url)
+        # ✅ FIXED: use a separate DB session for each progress update
+        def progress_callback(progress: int):
+            try:
+                progress_db = SessionLocal()
+                progress_db.query(Repository).filter(
+                    Repository.repo_url == repo_url,
+                    Repository.user_id == user_id
+                ).update({"progress": progress})
+                progress_db.commit()
+                progress_db.close()
+            except Exception:
+                pass
+
+        ingest_from_git(repo_url, progress_callback=progress_callback)
 
         repo_path = get_local_repo_path(repo_url)
         new_hash = get_latest_commit_hash(repo_path)
 
         if repo.last_commit_hash is None:
             repo.commit_status = "first_time"
-
         elif repo.last_commit_hash == new_hash:
             repo.commit_status = "same_repo"
-
         else:
             repo.commit_status = "updated"
 
         repo.last_commit_hash = new_hash
         repo.progress = 100
         repo.status = "completed"
-
         db.commit()
 
     except Exception as e:
@@ -180,7 +191,6 @@ def process_question(task_id: str, repo_url: str, question: str, user_id: int):
             task.answer = result
 
         task.completed_at = datetime.utcnow()
-
         db.commit()
 
     except Exception as e:
@@ -300,6 +310,29 @@ def ingest(
 
 
 # =========================
+# STATUS API
+# =========================
+@app.get("/status")
+def get_status(
+    repo_url: str,
+    user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    repo = db.query(Repository).filter(
+        Repository.repo_url == repo_url,
+        Repository.user_id == user["id"]
+    ).first()
+
+    if not repo:
+        return {"status": "not_found", "progress": 0}
+
+    return {
+        "status": repo.status,
+        "progress": repo.progress
+    }
+
+
+# =========================
 # ASK API
 # =========================
 @app.post("/ask")
@@ -311,7 +344,6 @@ def ask(
     user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # ✅ ADDED: block questions until ingestion is complete
     repo = db.query(Repository).filter(
         Repository.repo_url == req.repo_url,
         Repository.user_id == user["id"]
