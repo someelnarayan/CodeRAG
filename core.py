@@ -31,10 +31,10 @@ def get_repo_name(repo_url: str) -> str:
 
 
 def ingest_from_git(repo_url, progress_callback=None):
-    """Clone a repo, split code into chunks, embed them, and store in database."""
     print(f"Ingesting {repo_url}...")
 
     repo_name = get_repo_name(repo_url)
+    repo_path = get_local_repo_path(repo_url)  # ✅ moved up, used consistently
     collection = get_collection(repo_name)
 
     if collection.count() > 0:
@@ -47,8 +47,6 @@ def ingest_from_git(repo_url, progress_callback=None):
             "repo": repo_name,
             "chunks_count": collection.count()
         }
-
-    repo_path = get_local_repo_path(repo_url)
 
     print("CLONING REPO...")
     clone_repo(repo_url, repo_path)
@@ -144,7 +142,6 @@ def ingest_from_git(repo_url, progress_callback=None):
                 collection.add(**pending_vectors)
                 pending_vectors = {"ids": [], "documents": [], "embeddings": [], "metadatas": []}
 
-        # progress runs from 10% to 95% during embedding
         if progress_callback:
             progress = 10 + int((current_batch_num / total_batches) * 85)
             progress_callback(min(progress, 95))
@@ -181,7 +178,6 @@ def ingest_from_git(repo_url, progress_callback=None):
 
 
 def ask_question(repo_url, question):
-    """Answer a question about a codebase using RAG pipeline."""
     repo_name = get_repo_name(repo_url)
     collection = get_collection(repo_name)
 

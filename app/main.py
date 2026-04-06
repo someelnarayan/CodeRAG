@@ -117,7 +117,6 @@ def ingest_with_status(repo_url: str, user_id: int):
         repo.progress = 0
         db.commit()
 
-        # ✅ FIXED: use a separate DB session for each progress update
         def progress_callback(progress: int):
             try:
                 progress_db = SessionLocal()
@@ -132,17 +131,25 @@ def ingest_with_status(repo_url: str, user_id: int):
 
         ingest_from_git(repo_url, progress_callback=progress_callback)
 
+        # ✅ FIXED: only get commit hash if local repo folder actually exists
         repo_path = get_local_repo_path(repo_url)
-        new_hash = get_latest_commit_hash(repo_path)
 
-        if repo.last_commit_hash is None:
-            repo.commit_status = "first_time"
-        elif repo.last_commit_hash == new_hash:
-            repo.commit_status = "same_repo"
+        if repo_path.exists() and repo_path.is_dir():
+            new_hash = get_latest_commit_hash(repo_path)
+
+            if repo.last_commit_hash is None:
+                repo.commit_status = "first_time"
+            elif repo.last_commit_hash == new_hash:
+                repo.commit_status = "same_repo"
+            else:
+                repo.commit_status = "updated"
+
+            repo.last_commit_hash = new_hash
         else:
-            repo.commit_status = "updated"
+            # ✅ folder missing means it was already indexed before (stale state)
+            # ingest_from_git already handled this gracefully, just mark status
+            repo.commit_status = "already_indexed"
 
-        repo.last_commit_hash = new_hash
         repo.progress = 100
         repo.status = "completed"
         db.commit()
