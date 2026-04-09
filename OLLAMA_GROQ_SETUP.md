@@ -53,7 +53,7 @@ That's it. Rest of the settings are already good.
 
 ```bash
 # Install new dependencies (slowapi for rate limiting)
-pip install -r requirements.txt
+pip install -r requirements_backend.txt
 
 # Start the server
 python -m uvicorn app.main:app --reload

@@ -13,10 +13,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # =========================
 # PYTHON DEPENDENCIES
 # =========================
-COPY requirements.txt ./
+COPY requirements_backend.txt ./
 
 RUN pip install --upgrade pip
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements_backend.txt
 
 # =========================
 # COPY PROJECT
