@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   # Ollama runs the Llama 3.1 model locally (commented out for production, using Groq instead)
   # ollama:
@@ -27,60 +29,102 @@ services:
   #     retries: 3
   #     start_period: 30s
 
-  # Uncomment below if you want to run PostgreSQL in Docker too
+  # PostgreSQL Database
   postgres:
     image: postgres:15-alpine
-    container_name: postgres-code-ragg
+    container_name: ${POSTGRES_CONTAINER_NAME:-postgres-code-ragg}
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: 6205558787
-      POSTGRES_DB: code_ragg_db
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-6205558787}
+      POSTGRES_DB: ${POSTGRES_DB:-code_ragg_db}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ${POSTGRES_VOLUME:-postgres_data}:/var/lib/postgresql/data
+    # Expose ports in development, internal only in production
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
-  # Uncomment below if you want to run Redis in Docker too
+  # Redis Cache
   redis:
     image: redis:7-alpine
-    container_name: redis-cache
+    container_name: ${REDIS_CONTAINER_NAME:-redis-cache}
+    command: redis-server --appendonly yes
+    volumes:
+      - ${REDIS_VOLUME:-redis_data}:/data
+    # Expose ports in development, internal only in production
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
+  # FastAPI Backend
   web:
-    build: .
-    container_name: code-ragg-web
-    ports:
-      - "8000:8000"
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ${WEB_CONTAINER_NAME:-code-ragg-web}
     environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - REDIS_URL=${REDIS_URL}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:6205558787@postgres:5432/code_ragg_db}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
       - SECRET_KEY=${SECRET_KEY}
       - GROQ_API_KEY=${GROQ_API_KEY}
       - JINA_API_KEY=${JINA_API_KEY}
-      - USE_GROQ=${USE_GROQ}
-      - ENABLE_OLLAMA=${ENABLE_OLLAMA}
-      - DEBUG=${DEBUG}
-      - LOG_LEVEL=${LOG_LEVEL}
+      - USE_GROQ=${USE_GROQ:-true}
+      - ENABLE_OLLAMA=${ENABLE_OLLAMA:-false}
+      - DEBUG=${DEBUG:-false}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - CREATE_DEFAULT_ACCOUNT=${CREATE_DEFAULT_ACCOUNT:-true}
     volumes:
       - ./data:/app/data
     depends_on:
-      - postgres
-      - redis
-
-  frontend:
-    build: .
-    container_name: code-ragg-frontend
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # Expose ports in development, internal only in production
     ports:
-      - "8501:8501"
+      - "${WEB_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # Streamlit Frontend
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ${FRONTEND_CONTAINER_NAME:-code-ragg-frontend}
     environment:
-      - BASE_URL=http://web:8000
+      - BASE_URL=${BASE_URL:-http://web:8000}
     depends_on:
-      - web
+      web:
+        condition: service_healthy
     command: streamlit run streamlit_app.py --server.port 8501 --server.address 0.0.0.0
+    # Expose ports in development, internal only in production
+    ports:
+      - "${FRONTEND_PORT:-8501}:8501"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
 
 volumes:
   ollama_data:
     driver: local
   postgres_data:
+    driver: local
+  redis_data:
     driver: local

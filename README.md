@@ -55,10 +55,15 @@ A sophisticated Retrieval-Augmented Generation (RAG) system that ingests GitHub 
    ```bash
    cp .env.example .env
    # Edit .env with your API keys and settings
+   # ⚠️  NEVER commit .env to version control
    ```
 
 3. **Launch the application**
    ```bash
+   # For development (default)
+   docker-compose up --build
+
+   # For production with custom settings
    docker-compose up --build
    ```
 
@@ -66,6 +71,33 @@ A sophisticated Retrieval-Augmented Generation (RAG) system that ingests GitHub 
    - Frontend: http://localhost:8501
    - Backend API: http://localhost:8000
    - API Docs: http://localhost:8000/docs
+
+### Production Deployment
+
+For production deployment with proper security:
+
+1. **Set production environment variables**
+   ```bash
+   export DEBUG=false
+   export LOG_LEVEL=WARNING
+   export CREATE_DEFAULT_ACCOUNT=false
+   # Set other production secrets
+   ```
+
+2. **Use reverse proxy** (nginx/traefik) for SSL and load balancing
+
+3. **For fully production-ready deployment**, set these environment variables:
+   ```bash
+   export POSTGRES_CONTAINER_NAME=code-ragg-postgres-prod
+   export REDIS_CONTAINER_NAME=code-ragg-redis-prod
+   export WEB_CONTAINER_NAME=code-ragg-web-prod
+   export FRONTEND_CONTAINER_NAME=code-ragg-frontend-prod
+   # Remove ports for internal networking only
+   export POSTGRES_PORT=
+   export REDIS_PORT=
+   export WEB_PORT=
+   export FRONTEND_PORT=
+   ```
 
 ### Local Development Setup
 
@@ -94,7 +126,22 @@ A sophisticated Retrieval-Augmented Generation (RAG) system that ingests GitHub 
    streamlit run streamlit_app.py
    ```
 
-## 🔧 Configuration
+## � Security
+
+### Environment Variables
+- **Never commit `.env` to version control** - it's in `.gitignore`
+- Use strong, randomly generated `SECRET_KEY`: `python -c "import secrets; print(secrets.token_hex(32))"`
+- Store API keys securely (environment variables, secret managers)
+- Use `.env.example` as a template for required variables
+
+### Production Security
+- Use `docker-compose.prod.yml` for production deployments
+- Implement proper authentication and authorization
+- Enable HTTPS with SSL certificates
+- Use managed database services instead of local containers
+- Regularly rotate API keys and secrets
+
+## �🔧 Configuration
 
 ### Environment Variables
 

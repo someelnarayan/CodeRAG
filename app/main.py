@@ -64,6 +64,13 @@ def ensure_db_schema():
 
 
 # =========================
+# ROOT
+# =========================
+@app.get("/")
+def root():
+    return {"message": "CodeRAG API - AI-Powered Code Assistant", "version": "1.0.0", "docs": "/docs"}
+
+# =========================
 # HEALTH
 # =========================
 @app.get("/health")
