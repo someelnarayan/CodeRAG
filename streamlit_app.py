@@ -8,7 +8,8 @@ load_dotenv()
 
 st.set_page_config(page_title="Code RAG Assistant", layout="centered")
 
-BASE_URL = os.getenv("BASE_URL", "http://127.0.0.1:8000")
+# ✅ FIXED: hardcode your Render URL as default
+BASE_URL = os.getenv("BASE_URL", "https://coderag-2.onrender.com")
 
 # =========================
 # SESSION STATE
@@ -55,27 +56,33 @@ if not st.session_state.token:
 
     with col1:
         if st.button("Login", use_container_width=True):
-            res = requests.post(
-                f"{BASE_URL}/auth/login",
-                data={"username": username, "password": password}
-            )
-            if res.status_code == 200:
-                st.session_state.token = res.json()["access_token"]
-                st.success("Login successful.")
-                st.rerun()
-            else:
-                st.error(res.json().get("detail", "Login failed."))
+            try:
+                res = requests.post(
+                    f"{BASE_URL}/auth/login",
+                    data={"username": username, "password": password}
+                )
+                if res.status_code == 200:
+                    st.session_state.token = res.json()["access_token"]
+                    st.success("Login successful.")
+                    st.rerun()
+                else:
+                    st.error(res.json().get("detail", "Login failed."))
+            except Exception as e:
+                st.error(f"Cannot connect to backend: {e}")
 
     with col2:
         if st.button("Signup", use_container_width=True):
-            res = requests.post(
-                f"{BASE_URL}/auth/signup",
-                params={"username": username, "password": password}
-            )
-            if res.status_code == 200:
-                st.success("Account created. Please login.")
-            else:
-                st.error(res.json().get("detail", "Signup failed."))
+            try:
+                res = requests.post(
+                    f"{BASE_URL}/auth/signup",
+                    params={"username": username, "password": password}
+                )
+                if res.status_code == 200:
+                    st.success("Account created. Please login.")
+                else:
+                    st.error(res.json().get("detail", "Signup failed."))
+            except Exception as e:
+                st.error(f"Cannot connect to backend: {e}")
 
 
 # =========================
@@ -117,7 +124,6 @@ else:
     st.title("Code RAG Assistant")
     st.caption(f"Repository: `{st.session_state.repo}`")
 
-    # Check if already completed from a previous poll
     if not st.session_state.ingestion_complete:
         status_data = get_repo_status(st.session_state.repo)
         status = status_data.get("status")
@@ -139,7 +145,6 @@ else:
             status_text = st.empty()
             status_text.caption(f"Progress: {progress}%")
 
-            # Live polling loop
             while True:
                 time.sleep(2)
                 status_data = get_repo_status(st.session_state.repo)
