@@ -1,6 +1,7 @@
 # llm/llm.py
 
 import requests
+import httpx
 import time
 import os
 from pathlib import Path
@@ -12,8 +13,6 @@ from setting.settings import OLLAMA_BASE_URL, LLM_MODEL, USE_OLLAMA
 # ==============================
 # ENV LOAD
 # ==============================
-
-# ✅ FIXED: always read .env from project root
 BASE_DIR = Path(__file__).resolve().parent.parent
 env_config = dotenv_values(BASE_DIR / ".env")
 
@@ -25,7 +24,7 @@ GROQ_API_KEY = (
 
 print("Using GROQ KEY:", GROQ_API_KEY[:10] if GROQ_API_KEY else "None")
 
-GROQ_TIMEOUT = 30       # ✅ FIXED: was 4 — too low, caused timeouts
+GROQ_TIMEOUT = 30
 OLLAMA_TIMEOUT = 10
 
 # ==============================
@@ -36,7 +35,10 @@ groq_client = None
 
 if GROQ_API_KEY:
     try:
-        groq_client = Groq(api_key=GROQ_API_KEY)
+        groq_client = Groq(
+            api_key=GROQ_API_KEY,
+            http_client=httpx.Client()
+        )
         print("Groq client initialized successfully")
     except Exception as e:
         print("Groq initialization failed:", str(e))
@@ -85,9 +87,7 @@ Answer clearly:
         )
 
         duration = time.time() - start_time
-
         answer = response.choices[0].message.content
-
         print(f"Groq response received in {duration:.2f}s")
 
         return answer, True
@@ -134,9 +134,7 @@ Answer clearly:
 
         response.raise_for_status()
         data = response.json()
-
         duration = time.time() - start_time
-
         print(f"Ollama response received in {duration:.2f}s")
 
         return data.get("response", ""), True
