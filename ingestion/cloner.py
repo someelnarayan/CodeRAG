@@ -1,5 +1,9 @@
 from pathlib import Path
+import os
 import git
+
+git.refresh('/usr/bin/git')
+
 from utils.files_utils import get_local_repo_path
 
 
@@ -26,7 +30,7 @@ def clone_repository(repo_url: str, repo_path: Path | None = None):
     git.Repo.clone_from(
         repo_url,
         str(repo_path),
-        depth=1  # shallow clone, same as before
+        depth=1
     )
 
     return repo_path
